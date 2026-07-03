@@ -1,0 +1,30 @@
+spring:
+  application:
+    name: hgx-ai-agent
+  ai:
+    dashscope:
+      api-key: sk-c45f43002b7e4d5291bd1686a19c1a3b
+      chat:
+        options:
+          model: qwen-max
+    mcp:
+      client:
+#        stdio:
+#          servers-configuration: classpath:mcp-servers.json
+        sse:
+          connections:
+            image-search-mcp-server:
+              url: http://localhost:8127
+#    vectorstore:
+#      pgvector:
+#        index-type: HNSW
+#        dimensions: 1536
+#        distance-type: COSINE_DISTANCE
+#        max-document-batch-size: 10000 # Optional: Maximum number of documents per batch
+  datasource:
+      url:  jdbc:postgresql://localhost:5432/hgx_ai_agent
+      username: postgres
+      password: 123456
+# searchAPI
+search-api:
+  api-key: HgMx1pBK3JCwA4SsEe9GUafS
