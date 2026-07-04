@@ -472,7 +472,8 @@ h3 {
 
 .composer button,
 .knowledge-actions button,
-.table-tools button {
+.table-tools button,
+.row-actions button {
   min-height: 38px;
   padding: 0 14px;
   border: 1px solid var(--fluent-border);
@@ -505,7 +506,8 @@ h3 {
 
 .composer button:hover:not(:disabled),
 .knowledge-actions button:hover,
-.table-tools button:hover {
+.table-tools button:hover,
+.row-actions button:hover {
   filter: brightness(1.03);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.28),
@@ -514,21 +516,30 @@ h3 {
 
 .composer button:active:not(:disabled),
 .knowledge-actions button:active,
-.table-tools button:active {
+.table-tools button:active,
+.row-actions button:active {
   transform: scale(0.98);
 }
 
-.composer button:disabled {
+.composer button:disabled,
+.knowledge-actions button:disabled,
+.table-tools button:disabled,
+.row-actions button:disabled {
   cursor: not-allowed;
   filter: grayscale(0.2);
   opacity: 0.55;
 }
 
 .knowledge-actions,
-.table-tools {
+.table-tools,
+.row-actions {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.file-input {
+  display: none;
 }
 
 .knowledge-tabs {
@@ -556,6 +567,22 @@ h3 {
   padding: 20px;
   scrollbar-width: thin;
   scrollbar-color: rgba(86, 107, 126, 0.38) transparent;
+}
+
+.message-banner {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(0, 120, 212, 0.16);
+  border-radius: var(--fluent-radius);
+  color: #16446a;
+  background: rgba(230, 242, 251, 0.72);
+  font-size: 13px;
+}
+
+.message-banner.error {
+  border-color: rgba(196, 43, 28, 0.18);
+  color: #7a2017;
+  background: rgba(253, 232, 230, 0.76);
 }
 
 .stat-grid {
@@ -615,12 +642,12 @@ h3 {
 }
 
 .document-table {
-  min-width: 820px;
+  min-width: 980px;
 }
 
 .table-row {
   display: grid;
-  grid-template-columns: minmax(260px, 1.4fr) 100px 130px 100px 160px;
+  grid-template-columns: minmax(260px, 1.4fr) 100px 130px 100px 170px 170px;
   gap: 16px;
   align-items: center;
   padding: 13px 16px;
@@ -640,8 +667,11 @@ h3 {
 }
 
 .doc-name {
+  overflow: hidden;
   color: #111827;
   font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .status-dot {
@@ -655,6 +685,38 @@ h3 {
 
 .status-dot.pending {
   background: #f5a524;
+}
+
+.status-dot.processing {
+  background: #0f8de8;
+  box-shadow: 0 0 0 4px rgba(15, 141, 232, 0.12);
+}
+
+.status-dot.completed {
+  background: #107c10;
+}
+
+.status-dot.failed {
+  background: #c42b1c;
+}
+
+.row-actions button {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.row-actions button.danger {
+  color: #9a3412;
+  border-color: rgba(196, 43, 28, 0.18);
+  background: rgba(255, 247, 237, 0.78);
+}
+
+.empty-row {
+  padding: 28px 16px;
+  color: #64748b;
+  text-align: center;
+  font-size: 14px;
 }
 
 .graph-layout {

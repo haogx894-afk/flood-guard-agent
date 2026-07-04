@@ -15,22 +15,22 @@
             <button
               type="button"
               :class="{ active: activeView === 'chat' }"
-              @click="activeView = 'chat'"
+              @click="switchView('chat')"
             >
               智能对话
             </button>
             <button
               type="button"
               :class="{ active: activeView === 'knowledge' }"
-              @click="activeView = 'knowledge'"
+              @click="switchView('knowledge')"
             >
               知识库管理
             </button>
           </nav>
 
-          <div class="runtime-status" :class="{ active: isStreaming }">
+          <div class="runtime-status" :class="{ active: isStreaming || isKnowledgeBusy }">
             <span aria-hidden="true"></span>
-            {{ isStreaming ? '响应中' : '在线' }}
+            {{ isStreaming ? '响应中' : isKnowledgeBusy ? '处理中' : '在线' }}
           </div>
         </div>
       </header>
@@ -78,12 +78,23 @@
         <section v-else class="knowledge-card fluent-card">
           <div class="knowledge-header">
             <div>
-              <p class="section-kicker">Graph RAG Knowledge Base</p>
+              <p class="section-kicker">Knowledge Base Management</p>
               <h2>知识库管理</h2>
             </div>
             <div class="knowledge-actions">
-              <button type="button">刷新状态</button>
-              <button type="button" class="primary">上传文档</button>
+              <button type="button" :disabled="isKnowledgeBusy" @click="fetchDocuments">
+                刷新状态
+              </button>
+              <button type="button" class="primary" :disabled="isKnowledgeBusy" @click="openUploadDialog">
+                上传文档
+              </button>
+              <input
+                ref="fileInputRef"
+                class="file-input"
+                type="file"
+                accept=".pdf,.doc,.docx,.md,.markdown"
+                @change="handleFileSelected"
+              />
             </div>
           </div>
 
@@ -105,6 +116,13 @@
           </div>
 
           <section v-if="knowledgeTab === 'documents'" class="knowledge-body">
+            <div v-if="knowledgeError" class="message-banner error">
+              {{ knowledgeError }}
+            </div>
+            <div v-if="knowledgeNotice" class="message-banner">
+              {{ knowledgeNotice }}
+            </div>
+
             <div class="stat-grid">
               <div
                 v-for="item in documentStats"
@@ -120,11 +138,12 @@
               <div class="table-header">
                 <div>
                   <h3>已上传文档</h3>
-                  <p>后续接入 API 后，这里展示 PDF、Word、Markdown 等入库状态。</p>
+                  <p>知识库中的文档入库信息</p>
                 </div>
                 <div class="table-tools">
-                  <button type="button">扫描/重试</button>
-                  <button type="button">清空失败</button>
+                  <button type="button" :disabled="isKnowledgeBusy" @click="fetchDocuments">
+                    刷新
+                  </button>
                 </div>
               </div>
 
@@ -135,13 +154,23 @@
                   <span>状态</span>
                   <span>分块</span>
                   <span>更新时间</span>
+                  <span>操作</span>
                 </div>
+
+                <div v-if="isLoadingDocuments" class="empty-row">
+                  正在加载知识库文档...
+                </div>
+                <div v-else-if="documentRows.length === 0" class="empty-row">
+                  暂无文档，请点击右上角上传文档。
+                </div>
+
                 <div
                   v-for="doc in documentRows"
-                  :key="doc.name"
+                  v-else
+                  :key="doc.id"
                   class="table-row"
                 >
-                  <span class="doc-name">{{ doc.name }}</span>
+                  <span class="doc-name" :title="doc.name">{{ doc.name }}</span>
                   <span>{{ doc.type }}</span>
                   <span>
                     <em :class="['status-dot', doc.statusType]"></em>
@@ -149,6 +178,14 @@
                   </span>
                   <span>{{ doc.chunks }}</span>
                   <span>{{ doc.updatedAt }}</span>
+                  <span class="row-actions">
+                    <button type="button" :disabled="isKnowledgeBusy" @click="rebuildDocument(doc.id)">
+                      重建
+                    </button>
+                    <button type="button" class="danger" :disabled="isKnowledgeBusy" @click="deleteDocument(doc.id)">
+                      删除
+                    </button>
+                  </span>
                 </div>
               </div>
             </div>
@@ -200,7 +237,13 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, ref } from 'vue';
 import ChatMessage from './components/ChatMessage.vue';
-import { buildManusSseUrl } from './services/api';
+import {
+  buildManusSseUrl,
+  deleteKnowledgeDocument,
+  getKnowledgeDocuments,
+  rebuildKnowledgeDocument,
+  uploadKnowledgeDocument,
+} from './services/api';
 
 const CHAT_ID_STORAGE_KEY = 'hgx-ai-agent-chat-id';
 const CONNECTING_MESSAGE = '正在连接防汛智能体...';
@@ -209,46 +252,49 @@ const openingMessage = '您好！我是您的专属防汛管家。在制定方�
 
 const activeView = ref('chat');
 const knowledgeTab = ref('documents');
+const knowledgeDocuments = ref([]);
+const isLoadingDocuments = ref(false);
+const isUploadingDocument = ref(false);
+const operatingDocumentId = ref('');
+const knowledgeError = ref('');
+const knowledgeNotice = ref('');
+const fileInputRef = ref(null);
 
-const documentStats = [
-  { label: '文档总数', value: '0' },
-  { label: '向量切片', value: '0' },
-  { label: '待接入 API', value: 'API' },
-  { label: 'Graph RAG', value: 'ON' },
-];
+const graphStats = computed(() => [
+  { label: '实体', value: '-' },
+  { label: '关系', value: '-' },
+  { label: '入库文档', value: knowledgeDocuments.value.length },
+]);
 
-const documentRows = [
-  {
-    name: '北京市山洪灾害防御预案.pdf',
-    type: 'PDF',
-    status: '待接入',
-    statusType: 'pending',
-    chunks: '-',
-    updatedAt: '-',
-  },
-  {
-    name: '山区村防御对象台账.docx',
-    type: 'DOCX',
-    status: '待接入',
-    statusType: 'pending',
-    chunks: '-',
-    updatedAt: '-',
-  },
-  {
-    name: '山洪沟流域与危险区关系表.xlsx',
-    type: 'XLSX',
-    status: '待接入',
-    statusType: 'pending',
-    chunks: '-',
-    updatedAt: '-',
-  },
-];
+const isKnowledgeBusy = computed(
+  () => isLoadingDocuments.value || isUploadingDocument.value || Boolean(operatingDocumentId.value)
+);
 
-const graphStats = [
-  { label: '实体', value: '0' },
-  { label: '关系', value: '0' },
-  { label: '三元组', value: '0' },
-];
+const documentStats = computed(() => {
+  const documents = knowledgeDocuments.value;
+  const completedCount = documents.filter((item) => item.status === 'COMPLETED').length;
+  const failedCount = documents.filter((item) => item.status === 'FAILED').length;
+  const chunkCount = documents.reduce((sum, item) => sum + Number(item.chunkCount || 0), 0);
+
+  return [
+    { label: '文档总数', value: documents.length },
+    { label: '向量切片', value: chunkCount },
+    { label: '已完成', value: completedCount },
+    { label: '失败', value: failedCount },
+  ];
+});
+
+const documentRows = computed(() =>
+  knowledgeDocuments.value.map((doc) => ({
+    id: doc.id,
+    name: doc.fileName,
+    type: doc.fileType?.toUpperCase() || '-',
+    status: getStatusText(doc.status),
+    statusType: getStatusType(doc.status),
+    chunks: doc.chunkCount ?? 0,
+    updatedAt: formatDateTime(doc.updatedAt),
+  }))
+);
 
 function getOrCreateChatId() {
   let chatId = localStorage.getItem(CHAT_ID_STORAGE_KEY);
@@ -279,6 +325,136 @@ let eventSource = null;
 let typingQueue = Promise.resolve();
 
 const canSend = computed(() => inputValue.value.length > 0 && !isStreaming.value);
+
+async function switchView(view) {
+  activeView.value = view;
+  if (view === 'knowledge') {
+    await fetchDocuments();
+  }
+}
+
+function getStatusText(status) {
+  const statusMap = {
+    UPLOADED: '已上传',
+    PROCESSING: '处理中',
+    COMPLETED: '已完成',
+    FAILED: '失败',
+  };
+  return statusMap[status] || status || '-';
+}
+
+function getStatusType(status) {
+  const typeMap = {
+    UPLOADED: 'pending',
+    PROCESSING: 'processing',
+    COMPLETED: 'completed',
+    FAILED: 'failed',
+  };
+  return typeMap[status] || 'pending';
+}
+
+function formatDateTime(value) {
+  if (!value) {
+    return '-';
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function setKnowledgeNotice(message) {
+  knowledgeNotice.value = message;
+  window.setTimeout(() => {
+    if (knowledgeNotice.value === message) {
+      knowledgeNotice.value = '';
+    }
+  }, 2600);
+}
+
+function getErrorMessage(error, fallback) {
+  return error?.response?.data?.message || error?.response?.data || error?.message || fallback;
+}
+
+async function fetchDocuments() {
+  knowledgeError.value = '';
+  isLoadingDocuments.value = true;
+  try {
+    const { data } = await getKnowledgeDocuments();
+    knowledgeDocuments.value = Array.isArray(data) ? data : [];
+  } catch (error) {
+    knowledgeError.value = getErrorMessage(error, '加载知识库文档失败');
+  } finally {
+    isLoadingDocuments.value = false;
+  }
+}
+
+function openUploadDialog() {
+  fileInputRef.value?.click();
+}
+
+async function handleFileSelected(event) {
+  const file = event.target.files?.[0];
+  event.target.value = '';
+  if (!file) {
+    return;
+  }
+
+  knowledgeError.value = '';
+  knowledgeNotice.value = '';
+  isUploadingDocument.value = true;
+  try {
+    const { data } = await uploadKnowledgeDocument(file, true);
+    setKnowledgeNotice(`文档“${data.fileName || file.name}”已入库`);
+    await fetchDocuments();
+  } catch (error) {
+    knowledgeError.value = getErrorMessage(error, '上传文档失败');
+  } finally {
+    isUploadingDocument.value = false;
+  }
+}
+
+async function rebuildDocument(documentId) {
+  knowledgeError.value = '';
+  knowledgeNotice.value = '';
+  operatingDocumentId.value = documentId;
+  try {
+    await rebuildKnowledgeDocument(documentId);
+    setKnowledgeNotice('文档已重新切分并写入向量库');
+    await fetchDocuments();
+  } catch (error) {
+    knowledgeError.value = getErrorMessage(error, '重建文档失败');
+  } finally {
+    operatingDocumentId.value = '';
+  }
+}
+
+async function deleteDocument(documentId) {
+  const confirmed = window.confirm('确认删除该文档及其向量数据吗？');
+  if (!confirmed) {
+    return;
+  }
+
+  knowledgeError.value = '';
+  knowledgeNotice.value = '';
+  operatingDocumentId.value = documentId;
+  try {
+    await deleteKnowledgeDocument(documentId);
+    setKnowledgeNotice('文档和对应向量已删除');
+    await fetchDocuments();
+  } catch (error) {
+    knowledgeError.value = getErrorMessage(error, '删除文档失败');
+  } finally {
+    operatingDocumentId.value = '';
+  }
+}
 
 function getDistanceToBottom() {
   const panel = messagePanelRef.value;
