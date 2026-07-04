@@ -10,51 +10,33 @@
           </div>
         </div>
 
-        <nav class="top-tabs" aria-label="应用视图">
-          <button
-            v-for="item in navItems"
-            :key="item"
-            type="button"
-            :class="{ active: item === '智能对话' }"
-          >
-            {{ item }}
-          </button>
-        </nav>
+        <div class="header-actions">
+          <nav class="app-nav" aria-label="应用页面">
+            <button
+              type="button"
+              :class="{ active: activeView === 'chat' }"
+              @click="activeView = 'chat'"
+            >
+              智能对话
+            </button>
+            <button
+              type="button"
+              :class="{ active: activeView === 'knowledge' }"
+              @click="activeView = 'knowledge'"
+            >
+              知识库管理
+            </button>
+          </nav>
 
-        <div class="runtime-status" :class="{ active: isStreaming }">
-          <span aria-hidden="true"></span>
-          {{ isStreaming ? '响应中' : '在线' }}
+          <div class="runtime-status" :class="{ active: isStreaming }">
+            <span aria-hidden="true"></span>
+            {{ isStreaming ? '响应中' : '在线' }}
+          </div>
         </div>
       </header>
 
       <div class="workspace">
-        <aside class="sidebar fluent-card" aria-label="工作区导航">
-          <div class="panel-title">工作台</div>
-          <button
-            v-for="item in workspaceItems"
-            :key="item.name"
-            type="button"
-            class="side-item"
-            :class="{ active: item.active }"
-          >
-            <span aria-hidden="true">{{ item.icon }}</span>
-            {{ item.name }}
-          </button>
-
-          <div class="sidebar-section">
-            <div class="panel-title">数据图层</div>
-            <div
-              v-for="item in layerItems"
-              :key="item"
-              class="layer-pill"
-            >
-              <span aria-hidden="true"></span>
-              {{ item }}
-            </div>
-          </div>
-        </aside>
-
-        <section class="chat-card fluent-card">
+        <section v-if="activeView === 'chat'" class="chat-card fluent-card">
           <div class="chat-card-header">
             <div>
               <p class="section-kicker">AI 防汛管家</p>
@@ -93,30 +75,123 @@
           </form>
         </section>
 
-        <aside class="insight-panel fluent-card" aria-label="运行状态">
-          <div class="panel-title">会话状态</div>
-          <div class="metric-grid">
-            <div
-              v-for="metric in metricItems"
-              :key="metric.label"
-              class="metric-card"
-            >
-              <span>{{ metric.value }}</span>
-              <p>{{ metric.label }}</p>
+        <section v-else class="knowledge-card fluent-card">
+          <div class="knowledge-header">
+            <div>
+              <p class="section-kicker">Graph RAG Knowledge Base</p>
+              <h2>知识库管理</h2>
+            </div>
+            <div class="knowledge-actions">
+              <button type="button">刷新状态</button>
+              <button type="button" class="primary">上传文档</button>
             </div>
           </div>
 
-          <div class="sidebar-section">
-            <div class="panel-title">分析范围</div>
-            <div class="scope-list">
-              <span>山洪沟流域</span>
-              <span>危险区</span>
-              <span>安置点</span>
-              <span>监测站</span>
-              <span>防洪预案</span>
-            </div>
+          <div class="knowledge-tabs" role="tablist" aria-label="知识库模块">
+            <button
+              type="button"
+              :class="{ active: knowledgeTab === 'documents' }"
+              @click="knowledgeTab = 'documents'"
+            >
+              文档管理
+            </button>
+            <button
+              type="button"
+              :class="{ active: knowledgeTab === 'graph' }"
+              @click="knowledgeTab = 'graph'"
+            >
+              知识图谱
+            </button>
           </div>
-        </aside>
+
+          <section v-if="knowledgeTab === 'documents'" class="knowledge-body">
+            <div class="stat-grid">
+              <div
+                v-for="item in documentStats"
+                :key="item.label"
+                class="stat-card"
+              >
+                <span>{{ item.value }}</span>
+                <p>{{ item.label }}</p>
+              </div>
+            </div>
+
+            <div class="table-card">
+              <div class="table-header">
+                <div>
+                  <h3>已上传文档</h3>
+                  <p>后续接入 API 后，这里展示 PDF、Word、Markdown 等入库状态。</p>
+                </div>
+                <div class="table-tools">
+                  <button type="button">扫描/重试</button>
+                  <button type="button">清空失败</button>
+                </div>
+              </div>
+
+              <div class="document-table">
+                <div class="table-row table-head">
+                  <span>文件名</span>
+                  <span>类型</span>
+                  <span>状态</span>
+                  <span>分块</span>
+                  <span>更新时间</span>
+                </div>
+                <div
+                  v-for="doc in documentRows"
+                  :key="doc.name"
+                  class="table-row"
+                >
+                  <span class="doc-name">{{ doc.name }}</span>
+                  <span>{{ doc.type }}</span>
+                  <span>
+                    <em :class="['status-dot', doc.statusType]"></em>
+                    {{ doc.status }}
+                  </span>
+                  <span>{{ doc.chunks }}</span>
+                  <span>{{ doc.updatedAt }}</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section v-else class="knowledge-body graph-layout">
+            <div class="graph-card">
+              <div class="table-header">
+                <div>
+                  <h3>知识图谱</h3>
+                  <p>用于把实体、关系与向量检索结合，形成图谱增强 RAG。</p>
+                </div>
+                <span class="graph-badge">Graph RAG</span>
+              </div>
+
+              <div class="graph-canvas" aria-label="知识图谱预览">
+                <div class="graph-link link-a"></div>
+                <div class="graph-link link-b"></div>
+                <div class="graph-link link-c"></div>
+                <div class="graph-node node-main">山洪沟流域</div>
+                <div class="graph-node node-a">山区村</div>
+                <div class="graph-node node-b">安置点</div>
+                <div class="graph-node node-c">预案条款</div>
+                <div class="graph-node node-d">监测站</div>
+              </div>
+            </div>
+
+            <div class="graph-side">
+              <div
+                v-for="item in graphStats"
+                :key="item.label"
+                class="stat-card"
+              >
+                <span>{{ item.value }}</span>
+                <p>{{ item.label }}</p>
+              </div>
+              <div class="relation-card">
+                <h3>关系类型</h3>
+                <p>所属行政区、位于流域内、关联安置点、经过桥涵、引用预案条款。</p>
+              </div>
+            </div>
+          </section>
+        </section>
       </div>
     </section>
   </main>
@@ -132,18 +207,47 @@ const CONNECTING_MESSAGE = '正在连接防汛智能体...';
 const AUTO_SCROLL_THRESHOLD = 20;
 const openingMessage = '您好！我是您的专属防汛管家。在制定方案前，我需要先了解您的问题。请输入您的问题？';
 
-const navItems = ['智能对话', '空间研判', '预案核查'];
-const workspaceItems = [
-  { name: '智能对话', icon: '▦', active: true },
-  { name: '空间查询', icon: '⌖', active: false },
-  { name: '转移路线', icon: '↗', active: false },
-  { name: '监测覆盖', icon: '◌', active: false },
+const activeView = ref('chat');
+const knowledgeTab = ref('documents');
+
+const documentStats = [
+  { label: '文档总数', value: '0' },
+  { label: '向量切片', value: '0' },
+  { label: '待接入 API', value: 'API' },
+  { label: 'Graph RAG', value: 'ON' },
 ];
-const layerItems = ['区界', '流域', '村庄', '河流', '水库', '站点'];
-const metricItems = [
-  { label: '会话轮次', value: 'RAG' },
-  { label: '响应模式', value: 'SSE' },
-  { label: '界面体系', value: 'F2' },
+
+const documentRows = [
+  {
+    name: '北京市山洪灾害防御预案.pdf',
+    type: 'PDF',
+    status: '待接入',
+    statusType: 'pending',
+    chunks: '-',
+    updatedAt: '-',
+  },
+  {
+    name: '山区村防御对象台账.docx',
+    type: 'DOCX',
+    status: '待接入',
+    statusType: 'pending',
+    chunks: '-',
+    updatedAt: '-',
+  },
+  {
+    name: '山洪沟流域与危险区关系表.xlsx',
+    type: 'XLSX',
+    status: '待接入',
+    statusType: 'pending',
+    chunks: '-',
+    updatedAt: '-',
+  },
+];
+
+const graphStats = [
+  { label: '实体', value: '0' },
+  { label: '关系', value: '0' },
+  { label: '三元组', value: '0' },
 ];
 
 function getOrCreateChatId() {
