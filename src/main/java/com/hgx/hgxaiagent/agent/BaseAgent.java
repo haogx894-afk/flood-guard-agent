@@ -1,113 +1,7 @@
-//package com.hgx.hgxaiagent.agent;
-//
-//import cn.hutool.core.util.StrUtil;
-//import com.hgx.hgxaiagent.agent.model.AgentState;
-//import lombok.Data;
-//import lombok.extern.slf4j.Slf4j;
-//import org.springframework.ai.chat.client.ChatClient;
-//import org.springframework.ai.chat.messages.Message;
-//import org.springframework.ai.chat.messages.UserMessage;
-//
-//import java.util.ArrayList;
-//import java.util.List;
-//
-///**
-// * 抽象基础代理类，用于管理代理状态和执行流程。
-// * <p>
-// * 提供状态转换、内存管理和基于步骤的执行循环的基础功能。
-// * 子类必须实现step方法。
-// */
-//@Data
-//@Slf4j
-//public abstract class BaseAgent {
-//
-//    // 核心属性
-//    private String name;
-//
-//    // 提示词
-//    private String systemPrompt;
-//    private String nextStepPrompt;
-//
-//    // 代理状态
-//    private AgentState state = AgentState.IDLE;
-//
-//    // 执行步骤控制
-//    private int currentStep = 0;
-//    private int maxSteps = 10;
-//
-//    // LLM 大模型
-//    private ChatClient chatClient;
-//
-//    // Memory 记忆（需要自主维护会话上下文）
-//    private List<Message> messageList = new ArrayList<>();
-//
-//    /**
-//     * 运行代理
-//     *
-//     * @param userPrompt 用户提示词
-//     * @return 执行结果
-//     */
-//    public String run(String userPrompt) {
-//        // 1、基础校验
-//        if (this.state != AgentState.IDLE) {
-//            throw new RuntimeException("Cannot run agent from state: " + this.state);
-//        }
-//        if (StrUtil.isBlank(userPrompt)) {
-//            throw new RuntimeException("Cannot run agent with empty user prompt");
-//        }
-//        // 2、执行，更改状态
-//        this.state = AgentState.RUNNING;
-//        // 记录消息上下文
-//        messageList.add(new UserMessage(userPrompt));
-//        // 保存结果列表
-//        List<String> results = new ArrayList<>();
-//        try {
-//            // 执行循环
-//            for (int i = 0; i < maxSteps && state != AgentState.FINISHED; i++) {
-//                int stepNumber = i + 1;
-//                currentStep = stepNumber;
-//                log.info("Executing step {}/{}", stepNumber, maxSteps);
-//                // 单步执行
-//                String stepResult = step();
-//                String result = "Step " + stepNumber + ": " + stepResult;
-//                results.add(result);
-//            }
-//            // 检查是否超出步骤限制
-//            if (currentStep >= maxSteps) {
-//                state = AgentState.FINISHED;
-//                results.add("Terminated: Reached max steps (" + maxSteps + ")");
-//            }
-//            return String.join("\n", results);
-//        } catch (Exception e) {
-//            state = AgentState.ERROR;
-//            log.error("error executing agent", e);
-//            return "执行错误" + e.getMessage();
-//        } finally {
-//            // 3、清理资源
-//            this.cleanup();
-//        }
-//    }
-//
-//    /**
-//     * 定义单个步骤
-//     *
-//     * @return
-//     */
-//    public abstract String step();
-//
-//    /**
-//     * 清理资源
-//     */
-//    protected void cleanup() {
-//        // 子类可以重写此方法来清理资源
-//    }
-//}
-
-
 package com.hgx.hgxaiagent.agent;
 
 import cn.hutool.core.util.StrUtil;
-import com.hgx.hgxaiagent.agent.model.AgentState ;
+import com.hgx.hgxaiagent.agent.model.AgentState;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -122,139 +16,91 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 
 /**
- * 抽象基础代理类，用于管理代理状态和执行流程。
- * <p>
- * 提供状态转换、内存管理和基于步骤的执行循环的基础功能。
- * 子类必须实现step方法。
+ * 抽象基础代理类，用于管理代理状态、消息记忆和执行流程。
  */
 @Data
 @Slf4j
 public abstract class BaseAgent {
 
-    // 核心属性
     private String name;
 
-    // 提示词
     private String systemPrompt;
     private String nextStepPrompt;
 
-    // 代理状态
     private AgentState state = AgentState.IDLE;
 
-    // 执行步骤控制
     private int currentStep = 0;
     private int maxSteps = 10;
 
-    // LLM 大模型
     private ChatClient chatClient;
 
-    // Memory 记忆（需要自主维护会话上下文）
+    /**
+     * 智能体自己维护的多轮对话上下文。
+     */
     private List<Message> messageList = new ArrayList<>();
 
-    // 记忆保存回调；SSE 异步执行结束后，用它把最新 messageList 保存到外部缓存
+    /**
+     * SSE 异步执行结束后，用它把最新 messageList 保存到外部缓存。
+     */
     private Consumer<List<Message>> memorySaver;
 
-    /**
-     * 运行代理
-     *
-     * @param userPrompt 用户提示词
-     * @return 执行结果
-     */
     public String run(String userPrompt) {
-        // 1、基础校验
-        if (this.state != AgentState.IDLE) {
-            throw new RuntimeException("Cannot run agent from state: " + this.state);
-        }
-        if (StrUtil.isBlank(userPrompt)) {
-            throw new RuntimeException("Cannot run agent with empty user prompt");
-        }
-        // 2、执行，更改状态
+        validateUserPrompt(userPrompt);
+
         this.state = AgentState.RUNNING;
-        // 记录消息上下文
         messageList.add(new UserMessage(userPrompt));
-        // 保存结果列表
+
         List<String> results = new ArrayList<>();
         try {
-            // 执行循环
             for (int i = 0; i < maxSteps && state != AgentState.FINISHED; i++) {
                 int stepNumber = i + 1;
                 currentStep = stepNumber;
                 log.info("Executing step {}/{}", stepNumber, maxSteps);
-                // 单步执行
+
                 String stepResult = step();
-                String result = "Step " + stepNumber + ": " + stepResult;
-                results.add(result);
+                String output = formatStepOutput(stepNumber, stepResult);
+                results.add(output);
             }
-            // 检查是否超出步骤限制
+
             if (currentStep >= maxSteps) {
                 state = AgentState.FINISHED;
-                results.add("Terminated: Reached max steps (" + maxSteps + ")");
+                results.add("执行结束：达到最大步骤数（" + maxSteps + "）");
             }
             return String.join("\n", results);
         } catch (Exception e) {
             state = AgentState.ERROR;
             log.error("error executing agent", e);
-            return "执行错误" + e.getMessage();
+            return "执行错误：" + e.getMessage();
         } finally {
-            // 3、清理资源
-            this.saveMemory();
-            this.cleanup();
+            saveMemory();
+            cleanup();
         }
     }
 
-    /**
-     * 运行代理（流式输出）
-     *
-     * @param userPrompt 用户提示词
-     * @return 执行结果
-     */
     public SseEmitter runStream(String userPrompt) {
-        // 创建一个超时时间较长的 SseEmitter
-        SseEmitter sseEmitter = new SseEmitter(300000L); // 5 分钟超时
-        // 使用线程异步处理，避免阻塞主线程
+        SseEmitter sseEmitter = new SseEmitter(300000L);
+
         CompletableFuture.runAsync(() -> {
-            // 1、基础校验
             try {
-                if (this.state != AgentState.IDLE) {
-                    sseEmitter.send("错误：无法从状态运行代理：" + this.state);
-                    sseEmitter.complete();
-                    return;
-                }
-                if (StrUtil.isBlank(userPrompt)) {
-                    sseEmitter.send("错误：不能使用空提示词运行代理");
-                    sseEmitter.complete();
-                    return;
-                }
-            } catch (Exception e) {
-                sseEmitter.completeWithError(e);
-            }
-            // 2、执行，更改状态
-            this.state = AgentState.RUNNING;
-            // 记录消息上下文
-            messageList.add(new UserMessage(userPrompt));
-            // 保存结果列表
-            List<String> results = new ArrayList<>();
-            try {
-                // 执行循环
+                validateUserPrompt(userPrompt);
+
+                this.state = AgentState.RUNNING;
+                messageList.add(new UserMessage(userPrompt));
+
                 for (int i = 0; i < maxSteps && state != AgentState.FINISHED; i++) {
                     int stepNumber = i + 1;
                     currentStep = stepNumber;
                     log.info("Executing step {}/{}", stepNumber, maxSteps);
-                    // 单步执行
+
                     String stepResult = step();
-                    String result = "Step " + stepNumber + ": " + stepResult;
-                    results.add(result);
-                    // 输出当前每一步的结果到 SSE
-//                    sseEmitter.send(stepResult);
-                    sseEmitter.send(result);
+                    String output = formatStepOutput(stepNumber, stepResult);
+                    sseEmitter.send(output);
                 }
-                // 检查是否超出步骤限制
+
                 if (currentStep >= maxSteps) {
                     state = AgentState.FINISHED;
-                    results.add("Terminated: Reached max steps (" + maxSteps + ")");
-                    sseEmitter.send("执行结束：达到最大步骤（" + maxSteps + "）");
+                    sseEmitter.send("执行结束：达到最大步骤数（" + maxSteps + "）");
                 }
-                // 正常完成
                 sseEmitter.complete();
             } catch (Exception e) {
                 state = AgentState.ERROR;
@@ -266,46 +112,57 @@ public abstract class BaseAgent {
                     sseEmitter.completeWithError(ex);
                 }
             } finally {
-                // 3、清理资源
-                this.saveMemory();
-                this.cleanup();
+                saveMemory();
+                cleanup();
             }
         });
 
-        // 设置超时回调
         sseEmitter.onTimeout(() -> {
             this.state = AgentState.ERROR;
-            this.cleanup();
+            cleanup();
             log.warn("SSE connection timeout");
         });
-        // 设置完成回调
+
         sseEmitter.onCompletion(() -> {
             if (this.state == AgentState.RUNNING) {
                 this.state = AgentState.FINISHED;
             }
-            this.cleanup();
+            cleanup();
             log.info("SSE connection completed");
         });
+
         return sseEmitter;
     }
 
-    /**
-     * 定义单个步骤
-     *
-     * @return
-     */
-    public abstract String step();
+    private void validateUserPrompt(String userPrompt) {
+        if (this.state != AgentState.IDLE) {
+            throw new RuntimeException("无法从当前状态运行智能体：" + this.state);
+        }
+        if (StrUtil.isBlank(userPrompt)) {
+            throw new RuntimeException("不能使用空提示词运行智能体");
+        }
+    }
+
+    private String formatStepOutput(int stepNumber, String stepResult) {
+        if (shouldShowStepPrefix()) {
+            return "Step " + stepNumber + ": " + stepResult;
+        }
+        return stepResult;
+    }
 
     /**
-     * 清理资源
+     * 子类可以按当前步骤的类型决定是否显示 Step 前缀。
      */
+    protected boolean shouldShowStepPrefix() {
+        return true;
+    }
+
+    public abstract String step();
+
     protected void cleanup() {
         // 子类可以重写此方法来清理资源
     }
 
-    /**
-     * 保存当前对话记忆。
-     */
     protected void saveMemory() {
         if (this.memorySaver != null) {
             this.memorySaver.accept(new ArrayList<>(this.messageList));
