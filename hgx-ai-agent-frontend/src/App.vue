@@ -136,7 +136,8 @@
                     ref="fileInputRef"
                     class="file-input"
                     type="file"
-                    accept=".pdf,.doc,.docx,.md,.markdown"
+                    multiple
+                    accept=".pdf"
                     @change="handleFileSelected"
                   />
                 </div>
@@ -396,21 +397,47 @@ function openUploadDialog() {
 }
 
 async function handleFileSelected(event) {
-  const file = event.target.files?.[0];
+  const files = Array.from(event.target.files || []);
   event.target.value = '';
-  if (!file) {
+  if (files.length === 0) {
     return;
   }
 
   knowledgeError.value = '';
   knowledgeNotice.value = '';
   isUploadingDocument.value = true;
+
+  let successCount = 0;
+  const failedFiles = [];
+
   try {
-    const { data } = await uploadKnowledgeDocument(file, true);
-    setKnowledgeNotice(`文档“${data.fileName || file.name}”已入库`);
+    for (let index = 0; index < files.length; index++) {
+      const file = files[index];
+      knowledgeNotice.value = `正在上传 ${index + 1}/${files.length}：${file.name}`;
+
+      try {
+        await uploadKnowledgeDocument(file, true);
+        successCount++;
+      } catch (error) {
+        failedFiles.push({
+          name: file.name,
+          message: getErrorMessage(error, '上传失败'),
+        });
+      }
+    }
+
     await fetchDocuments();
-  } catch (error) {
-    knowledgeError.value = getErrorMessage(error, '上传文档失败');
+
+    if (failedFiles.length > 0) {
+      knowledgeError.value = `成功上传 ${successCount} 个，失败 ${failedFiles.length} 个：${failedFiles
+        .map((item) => item.name)
+        .join('、')}`;
+      knowledgeNotice.value = '';
+    } else {
+      setKnowledgeNotice(
+        files.length === 1 ? `文档“${files[0].name}”已入库` : `已成功上传 ${successCount} 个 PDF 文档`
+      );
+    }
   } finally {
     isUploadingDocument.value = false;
   }
