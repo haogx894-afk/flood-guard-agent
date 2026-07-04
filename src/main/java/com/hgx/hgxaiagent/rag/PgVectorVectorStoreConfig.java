@@ -75,7 +75,7 @@ public class PgVectorVectorStoreConfig {
         // 加载文档
         List<Document> documents = loveAppDocumentLoader.loadPdfs(); //这里修改为加载PDF文件
 //        取消下面这行，防止执行一次，就把文档向量往向量数据库添加一次
-        vectorStore.add(documents);
+//        vectorStore.add(documents);
         return vectorStore;
     }
 }

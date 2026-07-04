@@ -66,7 +66,12 @@
             </div>
           </div>
 
-          <section ref="messagePanelRef" class="message-panel" aria-label="聊天记录">
+          <section
+            ref="messagePanelRef"
+            class="message-panel"
+            aria-label="聊天记录"
+            @scroll.passive="handlePanelScroll"
+          >
             <ChatMessage
               v-for="message in messages"
               :key="message.id"
@@ -124,6 +129,7 @@ import { buildManusSseUrl } from './services/api';
 
 const CHAT_ID_STORAGE_KEY = 'hgx-ai-agent-chat-id';
 const CONNECTING_MESSAGE = '正在连接防汛智能体...';
+const AUTO_SCROLL_THRESHOLD = 20;
 const openingMessage = '您好！我是您的专属防汛管家。在制定方案前，我需要先了解您的问题。请输入您的问题？';
 
 const navItems = ['智能对话', '空间研判', '预案核查'];
@@ -156,22 +162,59 @@ const messages = ref([
     id: crypto.randomUUID(),
     role: 'assistant',
     content: openingMessage,
+    isTyping: false,
   },
 ]);
 
 const inputValue = ref('');
 const isStreaming = ref(false);
+const shouldAutoScroll = ref(true);
 const messagePanelRef = ref(null);
+const typingTimers = new Set();
 let eventSource = null;
+let typingQueue = Promise.resolve();
 
 const canSend = computed(() => inputValue.value.length > 0 && !isStreaming.value);
 
-function scrollToBottom() {
+function getDistanceToBottom() {
+  const panel = messagePanelRef.value;
+  if (!panel) {
+    return 0;
+  }
+  return panel.scrollHeight - panel.scrollTop - panel.clientHeight;
+}
+
+function isNearBottom() {
+  return getDistanceToBottom() <= AUTO_SCROLL_THRESHOLD;
+}
+
+function handlePanelScroll() {
+  shouldAutoScroll.value = isNearBottom();
+}
+
+function scrollToBottom({ behavior = 'smooth', force = false } = {}) {
   nextTick(() => {
     const panel = messagePanelRef.value;
-    if (panel) {
-      panel.scrollTop = panel.scrollHeight;
+    if (!panel) {
+      return;
     }
+    if (!force && !shouldAutoScroll.value) {
+      return;
+    }
+    panel.scrollTo({
+      top: panel.scrollHeight,
+      behavior,
+    });
+  });
+}
+
+function wait(ms) {
+  return new Promise((resolve) => {
+    const timer = window.setTimeout(() => {
+      typingTimers.delete(timer);
+      resolve();
+    }, ms);
+    typingTimers.add(timer);
   });
 }
 
@@ -180,8 +223,53 @@ function pushMessage(role, content) {
     id: crypto.randomUUID(),
     role,
     content,
+    isTyping: false,
   });
   scrollToBottom();
+}
+
+function isStepOutput(content) {
+  return content?.startsWith('Step ');
+}
+
+async function pushTypedAssistantMessage(fullContent) {
+  const messageId = crypto.randomUUID();
+
+  messages.value.push({
+    id: messageId,
+    role: 'assistant',
+    content: '',
+    isTyping: true,
+  });
+  scrollToBottom();
+
+  const isStepMessage = isStepOutput(fullContent);
+  const interval = isStepMessage ? 2 : fullContent.length > 500 ? 4 : 10;
+  const charsPerTick = isStepMessage ? Math.max(8, Math.ceil(fullContent.length / 120)) : 1;
+
+  for (let index = 0; index < fullContent.length; index += charsPerTick) {
+    const target = messages.value.find((message) => message.id === messageId);
+    if (!target) {
+      return;
+    }
+
+    target.content += fullContent.slice(index, index + charsPerTick);
+    scrollToBottom({ behavior: 'auto' });
+    await wait(interval);
+  }
+
+  const target = messages.value.find((message) => message.id === messageId);
+  if (target) {
+    target.isTyping = false;
+  }
+  scrollToBottom();
+}
+
+function enqueueTypedAssistantMessage(content) {
+  typingQueue = typingQueue
+    .catch(() => undefined)
+    .then(() => pushTypedAssistantMessage(content));
+  return typingQueue;
 }
 
 function removeMessage(messageId) {
@@ -192,6 +280,7 @@ function replaceMessageContent(messageId, content) {
   const target = messages.value.find((message) => message.id === messageId);
   if (target) {
     target.content = content;
+    target.isTyping = false;
     scrollToBottom();
   }
 }
@@ -208,6 +297,7 @@ function sendMessage() {
     return;
   }
 
+  shouldAutoScroll.value = isNearBottom();
   const userMessage = inputValue.value;
   inputValue.value = '';
 
@@ -218,6 +308,7 @@ function sendMessage() {
     id: loadingMessageId,
     role: 'assistant',
     content: CONNECTING_MESSAGE,
+    isTyping: false,
   });
 
   isStreaming.value = true;
@@ -238,12 +329,11 @@ function sendMessage() {
       removeMessage(loadingMessageId);
     }
 
-    pushMessage('assistant', content);
+    enqueueTypedAssistantMessage(content);
   };
 
-  eventSource.onerror = () => {
+  eventSource.onerror = async () => {
     closeEventSource();
-    isStreaming.value = false;
 
     if (!hasReceivedData) {
       replaceMessageContent(
@@ -251,10 +341,16 @@ function sendMessage() {
         '连接后端 SSE 接口失败，请确认 SpringBoot 服务已启动，并检查 http://localhost:8123/api/ai/manus/chat 是否可以访问。'
       );
     }
+
+    await typingQueue.catch(() => undefined);
+    isStreaming.value = false;
+    scrollToBottom();
   };
 }
 
 onBeforeUnmount(() => {
   closeEventSource();
+  typingTimers.forEach((timer) => window.clearTimeout(timer));
+  typingTimers.clear();
 });
 </script>

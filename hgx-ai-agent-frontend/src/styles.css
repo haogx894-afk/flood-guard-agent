@@ -31,11 +31,13 @@ body,
 #app {
   width: 100%;
   min-width: 320px;
+  height: 100%;
   min-height: 100%;
 }
 
 body {
   margin: 0;
+  overflow: hidden;
 }
 
 button,
@@ -48,7 +50,9 @@ button {
 }
 
 .app-root {
-  min-height: 100vh;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
   padding: 18px;
   color: var(--fluent-text);
   background:
@@ -59,7 +63,8 @@ button {
 
 .app-frame {
   width: min(1480px, 100%);
-  min-height: calc(100vh - 36px);
+  height: calc(100vh - 36px);
+  min-height: 0;
   margin: 0 auto;
   display: grid;
   grid-template-rows: auto 1fr;
@@ -202,6 +207,7 @@ h2 {
 
 .workspace {
   min-height: 0;
+  overflow: hidden;
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr) 270px;
   gap: 16px;
@@ -224,6 +230,7 @@ h2 {
 .sidebar,
 .insight-panel {
   min-height: 0;
+  overflow-y: auto;
   padding: 16px;
 }
 
@@ -298,6 +305,7 @@ h2 {
 .chat-card {
   min-width: 0;
   min-height: 0;
+  height: 100%;
   display: grid;
   grid-template-rows: auto 1fr auto;
   overflow: hidden;
@@ -333,9 +341,14 @@ h2 {
 }
 
 .message-panel {
+  height: 100%;
   min-height: 0;
   padding: 22px;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-behavior: smooth;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(86, 107, 126, 0.38) transparent;
   background:
     linear-gradient(90deg, rgba(0, 120, 212, 0.055) 1px, transparent 1px),
     linear-gradient(rgba(0, 120, 212, 0.045) 1px, transparent 1px),
@@ -403,6 +416,10 @@ h2 {
     inset 0 1px 0 rgba(255, 255, 255, 0.86),
     0 8px 22px rgba(24, 63, 98, 0.1);
   backdrop-filter: blur(18px);
+  transition:
+    box-shadow var(--fluent-transition),
+    border-color var(--fluent-transition),
+    background var(--fluent-transition);
 }
 
 .message-row.is-step .bubble {
@@ -444,11 +461,27 @@ h2 {
 }
 
 .bubble-content {
+  min-height: 1.72em;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
   line-height: 1.72;
   font-size: 14px;
+}
+
+.message-row.is-typing .bubble {
+  will-change: contents;
+}
+
+.typing-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 2px;
+  border-radius: 999px;
+  background: var(--fluent-blue);
+  vertical-align: -0.15em;
+  animation: caret-pulse 900ms ease-in-out infinite;
 }
 
 .composer {
@@ -568,6 +601,16 @@ h2 {
   }
 }
 
+@keyframes caret-pulse {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 @media (max-width: 1180px) {
   .workspace {
     grid-template-columns: 220px minmax(0, 1fr);
@@ -588,7 +631,8 @@ h2 {
   }
 
   .app-frame {
-    min-height: calc(100vh - 24px);
+    height: calc(100vh - 24px);
+    min-height: 0;
   }
 
   .topbar {
@@ -617,12 +661,14 @@ h2 {
 
 @media (max-width: 640px) {
   .app-root {
-    min-height: 100dvh;
+    height: 100dvh;
+    min-height: 0;
     padding: 0;
   }
 
   .app-frame {
-    min-height: 100dvh;
+    height: 100dvh;
+    min-height: 0;
     border: 0;
     border-radius: 0;
   }

@@ -37,7 +37,7 @@ public class HaoManus extends ToolCallAgent {
         this.setSystemPrompt(SYSTEM_PROMPT);
         String NEXT_STEP_PROMPT = """
         根据用户问题判断下一步动作：
-        1. 如果问题涉及本地防洪预案、村庄、负责人、电话、安置点、路线、监测站、危险区等资料，优先调用 searchLocalRag 工具。
+        1. 如果问题涉及本地防洪预案、村庄、负责人、电话、安置点、路线、监测站、危险区等资料，优先调用调用知识库的工具。
         2. 如果已经拿到足够信息，请根据工具返回内容回答用户。
         3. 回答完成后，调用 doTerminate 工具结束任务。
         4. 如果用户只是打招呼，直接简短回复并结束，不要反复追问。

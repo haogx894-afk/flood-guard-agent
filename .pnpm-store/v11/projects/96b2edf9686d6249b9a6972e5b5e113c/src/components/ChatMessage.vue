@@ -8,7 +8,9 @@
         <span>{{ title }}</span>
         <span v-if="isStepMessage" class="step-badge">执行步骤</span>
       </div>
-      <div class="bubble-content">{{ message.content }}</div>
+      <div class="bubble-content">
+        {{ message.content }}<span v-if="message.isTyping" class="typing-caret" aria-hidden="true"></span>
+      </div>
     </article>
   </div>
 </template>
@@ -33,5 +35,6 @@ const title = computed(() => {
 const rowClasses = computed(() => ({
   [props.message.role]: true,
   'is-step': isStepMessage.value,
+  'is-typing': props.message.isTyping,
 }));
 </script>
