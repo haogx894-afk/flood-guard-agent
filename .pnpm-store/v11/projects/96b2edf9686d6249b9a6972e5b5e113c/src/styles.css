@@ -435,27 +435,35 @@ h3 {
 }
 
 .composer {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 104px;
+  display: flex;
+  flex-direction: column;
   gap: 12px;
-  padding: 16px;
+  margin: 16px;
+  padding: 14px;
+  border: 2px solid transparent;
+  border-radius: 18px;
   border-top: 1px solid var(--fluent-border);
-  background: rgba(255, 255, 255, 0.62);
-  backdrop-filter: blur(18px);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(249, 252, 255, 0.94)) padding-box,
+    linear-gradient(105deg, #2563ff 0%, #0f8de8 48%, #20d7d2 100%) border-box;
+  box-shadow:
+    0 16px 36px rgba(15, 103, 192, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(20px);
 }
 
 .composer textarea {
   width: 100%;
-  min-height: 58px;
+  min-height: 82px;
   max-height: 144px;
-  resize: vertical;
-  padding: 13px 14px;
-  border: 1px solid var(--fluent-border-strong);
-  border-radius: var(--fluent-radius);
+  resize: none;
+  padding: 2px;
+  border: 0;
+  border-radius: 0;
   outline: none;
   color: #111827;
-  background: rgba(255, 255, 255, 0.82);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.84);
+  background: transparent;
+  box-shadow: none;
   line-height: 1.5;
   transition:
     border-color var(--fluent-transition),
@@ -464,18 +472,91 @@ h3 {
 }
 
 .composer textarea::placeholder {
-  color: #7a8794;
+  color: #a5b4c5;
 }
 
 .composer textarea:focus {
-  border-color: rgba(0, 120, 212, 0.72);
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
-    0 0 0 3px rgba(0, 120, 212, 0.14);
+  background: transparent;
+  box-shadow: none;
 }
 
-.composer button,
+.composer-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.composer-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tool-chip {
+  min-height: 30px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.36);
+  border-radius: 999px;
+  color: #ffffff;
+  background: linear-gradient(180deg, #2498ff, #0078d4);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    0 8px 18px rgba(0, 120, 212, 0.2);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.send-or-stop {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 800;
+  transition:
+    transform var(--fluent-transition),
+    box-shadow var(--fluent-transition),
+    filter var(--fluent-transition);
+}
+
+.send-button {
+  background: linear-gradient(135deg, #9ad1ff, #0f8de8);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    0 10px 22px rgba(0, 120, 212, 0.24);
+}
+
+.stop-button {
+  background: linear-gradient(135deg, #ff7a70, #d13438);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 10px 22px rgba(209, 52, 56, 0.22);
+}
+
+.send-or-stop:hover:not(:disabled),
+.tool-chip:hover {
+  filter: brightness(1.04);
+}
+
+.send-or-stop:active:not(:disabled),
+.tool-chip:active {
+  transform: scale(0.96);
+}
+
+.send-or-stop:disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.2);
+  opacity: 0.48;
+}
+
 .knowledge-actions button,
 .table-tools button,
 .row-actions button {
@@ -494,7 +575,6 @@ h3 {
     background var(--fluent-transition);
 }
 
-.composer button,
 .knowledge-actions button.primary,
 .table-tools button.primary {
   min-height: 58px;
@@ -511,7 +591,6 @@ h3 {
   min-height: 38px;
 }
 
-.composer button:hover:not(:disabled),
 .knowledge-actions button:hover,
 .table-tools button:hover,
 .row-actions button:hover {
@@ -521,14 +600,12 @@ h3 {
     0 12px 24px rgba(0, 103, 192, 0.14);
 }
 
-.composer button:active:not(:disabled),
 .knowledge-actions button:active,
 .table-tools button:active,
 .row-actions button:active {
   transform: scale(0.98);
 }
 
-.composer button:disabled,
 .knowledge-actions button:disabled,
 .table-tools button:disabled,
 .row-actions button:disabled {
@@ -999,17 +1076,29 @@ h3 {
   }
 
   .composer {
-    grid-template-columns: 1fr;
     gap: 10px;
     padding: 12px;
+    margin: 12px;
   }
 
   .composer textarea {
-    min-height: 54px;
+    min-height: 76px;
   }
 
-  .composer button {
-    min-height: 48px;
+  .composer-footer {
+    align-items: flex-end;
+  }
+
+  .tool-chip {
+    min-height: 28px;
+    padding: 0 11px;
+    font-size: 12px;
+  }
+
+  .send-or-stop {
+    width: 40px;
+    height: 40px;
+    flex-basis: 40px;
   }
 
   .knowledge-tabs {

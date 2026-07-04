@@ -65,13 +65,40 @@
             <textarea
               v-model.trim="inputValue"
               :disabled="isStreaming"
-              rows="2"
-              placeholder="请输入山洪防御、预案、村庄、转移路线、监测站等问题"
+              rows="3"
+              placeholder="Enter 发送，Shift + Enter 换行"
               @keydown.enter.exact.prevent="sendMessage"
             />
-            <button type="submit" :disabled="!canSend">
-              {{ isStreaming ? '生成中' : '发送' }}
-            </button>
+            <div class="composer-footer">
+              <div class="composer-tools" aria-label="输入模式">
+                <button type="button" class="tool-chip">
+                  深度思考
+                </button>
+                <button type="button" class="tool-chip">
+                  智能搜索
+                </button>
+              </div>
+              <button
+                v-if="isStreaming"
+                type="button"
+                class="send-or-stop stop-button"
+                aria-label="停止生成"
+                title="停止生成"
+                @click="stopGeneration"
+              >
+                ■
+              </button>
+              <button
+                v-else
+                type="submit"
+                class="send-or-stop send-button"
+                :disabled="!canSend"
+                aria-label="发送"
+                title="发送"
+              >
+                ➤
+              </button>
+            </div>
           </form>
         </section>
 
@@ -319,6 +346,7 @@ const messagePanelRef = ref(null);
 const typingTimers = new Set();
 let eventSource = null;
 let typingQueue = Promise.resolve();
+let responseGenerationId = 0;
 
 const canSend = computed(() => inputValue.value.length > 0 && !isStreaming.value);
 
@@ -534,7 +562,11 @@ function isStepOutput(content) {
   return content?.startsWith('Step ');
 }
 
-async function pushTypedAssistantMessage(fullContent) {
+async function pushTypedAssistantMessage(fullContent, generationId) {
+  if (generationId !== responseGenerationId) {
+    return;
+  }
+
   const messageId = crypto.randomUUID();
 
   messages.value.push({
@@ -550,6 +582,10 @@ async function pushTypedAssistantMessage(fullContent) {
   const charsPerTick = isStepMessage ? Math.max(8, Math.ceil(fullContent.length / 120)) : 1;
 
   for (let index = 0; index < fullContent.length; index += charsPerTick) {
+    if (generationId !== responseGenerationId) {
+      break;
+    }
+
     const target = messages.value.find((message) => message.id === messageId);
     if (!target) {
       return;
@@ -567,10 +603,10 @@ async function pushTypedAssistantMessage(fullContent) {
   scrollToBottom();
 }
 
-function enqueueTypedAssistantMessage(content) {
+function enqueueTypedAssistantMessage(content, generationId) {
   typingQueue = typingQueue
     .catch(() => undefined)
-    .then(() => pushTypedAssistantMessage(content));
+    .then(() => pushTypedAssistantMessage(content, generationId));
   return typingQueue;
 }
 
@@ -594,11 +630,30 @@ function closeEventSource() {
   }
 }
 
+function stopGeneration() {
+  responseGenerationId++;
+  closeEventSource();
+  typingQueue = Promise.resolve();
+  messages.value.forEach((message) => {
+    message.isTyping = false;
+  });
+  for (let index = messages.value.length - 1; index >= 0; index--) {
+    const message = messages.value[index];
+    if (message.role === 'assistant' && message.content === CONNECTING_MESSAGE) {
+      message.content = '已停止生成';
+      break;
+    }
+  }
+  isStreaming.value = false;
+}
+
 function sendMessage() {
   if (!canSend.value) {
     return;
   }
 
+  responseGenerationId++;
+  const currentGenerationId = responseGenerationId;
   shouldAutoScroll.value = isNearBottom();
   const userMessage = inputValue.value;
   inputValue.value = '';
@@ -621,6 +676,10 @@ function sendMessage() {
   eventSource = new EventSource(buildManusSseUrl(userMessage, chatId));
 
   eventSource.onmessage = (event) => {
+    if (currentGenerationId !== responseGenerationId) {
+      return;
+    }
+
     const content = event.data?.trim();
     if (!content) {
       return;
@@ -631,10 +690,14 @@ function sendMessage() {
       removeMessage(loadingMessageId);
     }
 
-    enqueueTypedAssistantMessage(content);
+    enqueueTypedAssistantMessage(content, currentGenerationId);
   };
 
   eventSource.onerror = async () => {
+    if (currentGenerationId !== responseGenerationId) {
+      return;
+    }
+
     closeEventSource();
 
     if (!hasReceivedData) {
