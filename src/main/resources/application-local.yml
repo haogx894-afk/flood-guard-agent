@@ -7,14 +7,14 @@ spring:
       chat:
         options:
           model: qwen-max
-    mcp:
-      client:
-#        stdio:
-#          servers-configuration: classpath:mcp-servers.json
-        sse:
-          connections:
-            image-search-mcp-server:
-              url: http://localhost:8128
+#    mcp:
+#      client:
+##        stdio:
+##          servers-configuration: classpath:mcp-servers.json
+#        sse:
+#          connections:
+#            image-search-mcp-server:
+#              url: http://localhost:8128
 #    vectorstore:
 #      pgvector:
 #        index-type: HNSW
