@@ -240,7 +240,7 @@ public abstract class BaseAgent {
                     String result = "Step " + stepNumber + ": " + stepResult;
                     results.add(result);
                     // 输出当前每一步的结果到 SSE
-                    sseEmitter.send(result);
+                    sseEmitter.send(stepResult);
                 }
                 // 检查是否超出步骤限制
                 if (currentStep >= maxSteps) {

@@ -22,107 +22,144 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * 处理工具调用的基础代理类，具体实现了 think 和 act 方法，可以用作创建实例的父类
+ * 处理工具调用的基础代理类。
+ * think 负责让模型决定是否调用工具，act 负责真正执行工具。
  */
 @EqualsAndHashCode(callSuper = true)
 @Data
 @Slf4j
 public class ToolCallAgent extends ReActAgent {
 
-    // 可用的工具
+    // 可用工具列表
     private final ToolCallback[] availableTools;
 
-    // 保存工具调用信息的响应结果（要调用那些工具）
+    // 保存模型返回的工具调用响应，act 阶段会继续使用
     private ChatResponse toolCallChatResponse;
 
-    // 工具调用管理者
+    // 保存模型直接回复的文本；没有工具调用时直接返回给前端
+    private String lastAssistantMessageText;
+
+    // 工具调用管理器
     private final ToolCallingManager toolCallingManager;
 
-    // 禁用 Spring AI 内置的工具调用机制，自己维护选项和消息上下文
+    // 禁用 Spring AI 内置工具调用机制，由当前类自己维护工具调用流程
     private final ChatOptions chatOptions;
 
     public ToolCallAgent(ToolCallback[] availableTools) {
-        super(); //写不写都行，取决于ReActAgent的构造方法有没有参数，没有参数就可以不写，有参数就必须写
+        super();
         this.availableTools = availableTools;
         this.toolCallingManager = ToolCallingManager.builder().build();
-        // 禁用 Spring AI 内置的工具调用机制，自己维护选项和消息上下文
         this.chatOptions = DashScopeChatOptions.builder().withProxyToolCalls(true).build();
     }
 
     /**
-     * 处理当前状态并决定下一步行动
+     * 思考阶段：调用大模型，让模型判断是否需要调用工具。
      *
-     * @return 是否需要执行行动
+     * @return true 表示需要进入 act 执行工具，false 表示无需工具调用
      */
     @Override
     public boolean think() {
-        // 1、校验提示词，拼接用户提示词
         if (StrUtil.isNotBlank(getNextStepPrompt())) {
-            UserMessage userMessage = new UserMessage(getNextStepPrompt()); //getNextStepPrompt()是nextStepPrompt的get方法
+            UserMessage userMessage = new UserMessage(getNextStepPrompt());
             getMessageList().add(userMessage);
         }
-        // 2、调用 AI 大模型，获取工具调用结果
+
         List<Message> messageList = getMessageList();
         Prompt prompt = new Prompt(messageList, this.chatOptions);
-        //这里也可以写成 Prompt prompt = new Prompt(messageList, chatOptions);
-        // 因为在构造方法中没有实现this.chatOptions = chatOptions
-        //没有变量的重名，不用加this，有属性的重名，必须加this区分成员变量
+
         try {
-            ChatResponse chatResponse = getChatClient().prompt(prompt).system(getSystemPrompt()).tools(availableTools).call().chatResponse();
-            // 记录响应，用于等下 Act
+            ChatResponse chatResponse = getChatClient()
+                    .prompt(prompt)
+                    .system(getSystemPrompt())
+                    .tools(availableTools)
+                    .call()
+                    .chatResponse();
+
             this.toolCallChatResponse = chatResponse;
-            // 3、解析工具调用结果，获取要调用的工具
-            // 助手消息
+
             AssistantMessage assistantMessage = chatResponse.getResult().getOutput();
-            // 获取要调用的工具列表
             List<AssistantMessage.ToolCall> toolCallList = assistantMessage.getToolCalls();
-            // 输出提示信息
             String result = assistantMessage.getText();
-            log.info(getName() + "的思考：" + result);
-            log.info(getName() + "选择了 " + toolCallList.size() + " 个工具来使用");
-            String toolCallInfo = toolCallList.stream().map(toolCall -> String.format("工具名称：%s，参数：%s", toolCall.name(), toolCall.arguments())).collect(Collectors.joining("\n"));
-            log.info(toolCallInfo);
-            // 如果不需要调用工具，返回 false
+            this.lastAssistantMessageText = result;
+
+            log.info("{} 的思考：{}", getName(), result);
+            log.info("{} 选择了 {} 个工具来使用", getName(), toolCallList.size());
+
+            String toolCallInfo = toolCallList.stream()
+                    .map(toolCall -> String.format("工具名称：%s，参数：%s", toolCall.name(), toolCall.arguments()))
+                    .collect(Collectors.joining("\n"));
+            if (StrUtil.isNotBlank(toolCallInfo)) {
+                log.info(toolCallInfo);
+            }
+
             if (toolCallList.isEmpty()) {
-                // 只有不调用工具时，才需要手动记录助手消息
                 getMessageList().add(assistantMessage);
-                //如果模型不调用工具，则直接结束
                 setState(AgentState.FINISHED);
                 return false;
-            } else {
-                // 需要调用工具时，无需记录助手消息，因为调用工具时会自动记录
-                return true;
             }
+
+            return true;
         } catch (Exception e) {
-            log.error(getName() + "的思考过程遇到了问题：" + e.getMessage());
-            getMessageList().add(new AssistantMessage("处理时遇到了错误：" + e.getMessage()));
+            log.error("{} 的思考过程遇到了问题：{}", getName(), e.getMessage(), e);
+            this.lastAssistantMessageText = "处理时遇到了错误：" + e.getMessage();
+            getMessageList().add(new AssistantMessage(this.lastAssistantMessageText));
+            setState(AgentState.ERROR);
             return false;
         }
     }
 
+
+    //优化智能体回答
     /**
-     * 执行工具调用并处理结果
+     * 单步执行。
+     * 如果模型没有选择工具，就返回模型自己的回答，而不是返回“思考完成 - 无需行动”。
+     */
+    @Override
+    public String step() {
+        try {
+            boolean shouldAct = think();
+            if (!shouldAct) {
+                if (getState() != AgentState.ERROR) {
+                    setState(AgentState.FINISHED);
+                }
+                return StrUtil.blankToDefault(lastAssistantMessageText, "思考完成，无需调用工具。");
+            }
+            return act();
+        } catch (Exception e) {
+            setState(AgentState.ERROR);
+            log.error("步骤执行失败", e);
+            return "步骤执行失败：" + e.getMessage();
+        }
+    }
+
+    /**
+     * 行动阶段：执行模型选择的工具，并把工具返回结果写入消息上下文。
      *
-     * @return 执行结果
+     * @return 工具调用结果
      */
     @Override
     public String act() {
-        if (!toolCallChatResponse.hasToolCalls()) {
+        if (toolCallChatResponse == null || !toolCallChatResponse.hasToolCalls()) {
             return "没有工具需要调用";
         }
-        // 调用工具
+
         Prompt prompt = new Prompt(getMessageList(), this.chatOptions);
         ToolExecutionResult toolExecutionResult = toolCallingManager.executeToolCalls(prompt, toolCallChatResponse);
-        // 记录消息上下文，conversationHistory 已经包含了助手消息和工具调用返回的结果
+
         setMessageList(toolExecutionResult.conversationHistory());
         ToolResponseMessage toolResponseMessage = (ToolResponseMessage) CollUtil.getLast(toolExecutionResult.conversationHistory());
-        // 判断是否调用了终止工具
-        boolean terminateToolCalled = toolResponseMessage.getResponses().stream().anyMatch(response -> response.name().equals("doTerminate"));
+
+        boolean terminateToolCalled = toolResponseMessage.getResponses()
+                .stream()
+                .anyMatch(response -> response.name().equals("doTerminate"));
         if (terminateToolCalled) {
-            // 任务结束，更改状态
             setState(AgentState.FINISHED);
         }
-        String results = toolResponseMessage.getResponses().stream().map(response -> "工具 " + response.name() + " 返回的结果：" + response.responseData()).collect(Collectors.joining("\n"));
+
+        String results = toolResponseMessage.getResponses()
+                .stream()
+                .map(response -> "工具 " + response.name() + " 返回的结果：" + response.responseData())
+                .collect(Collectors.joining("\n"));
         log.info(results);
         return results;
     }

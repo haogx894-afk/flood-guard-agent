@@ -4,4 +4,4 @@ spring:
   profiles:
     active: sse
 server:
-  port: 8127
+  port: 8128

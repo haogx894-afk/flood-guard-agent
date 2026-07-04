@@ -14,7 +14,7 @@ spring:
         sse:
           connections:
             image-search-mcp-server:
-              url: http://localhost:8127
+              url: http://localhost:8128
 #    vectorstore:
 #      pgvector:
 #        index-type: HNSW
