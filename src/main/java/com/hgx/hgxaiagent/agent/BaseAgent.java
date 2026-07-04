@@ -119,6 +119,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 
 /**
  * 抽象基础代理类，用于管理代理状态和执行流程。
@@ -149,6 +150,9 @@ public abstract class BaseAgent {
 
     // Memory 记忆（需要自主维护会话上下文）
     private List<Message> messageList = new ArrayList<>();
+
+    // 记忆保存回调；SSE 异步执行结束后，用它把最新 messageList 保存到外部缓存
+    private Consumer<List<Message>> memorySaver;
 
     /**
      * 运行代理
@@ -193,6 +197,7 @@ public abstract class BaseAgent {
             return "执行错误" + e.getMessage();
         } finally {
             // 3、清理资源
+            this.saveMemory();
             this.cleanup();
         }
     }
@@ -240,7 +245,8 @@ public abstract class BaseAgent {
                     String result = "Step " + stepNumber + ": " + stepResult;
                     results.add(result);
                     // 输出当前每一步的结果到 SSE
-                    sseEmitter.send(stepResult);
+//                    sseEmitter.send(stepResult);
+                    sseEmitter.send(result);
                 }
                 // 检查是否超出步骤限制
                 if (currentStep >= maxSteps) {
@@ -261,6 +267,7 @@ public abstract class BaseAgent {
                 }
             } finally {
                 // 3、清理资源
+                this.saveMemory();
                 this.cleanup();
             }
         });
@@ -294,5 +301,14 @@ public abstract class BaseAgent {
      */
     protected void cleanup() {
         // 子类可以重写此方法来清理资源
+    }
+
+    /**
+     * 保存当前对话记忆。
+     */
+    protected void saveMemory() {
+        if (this.memorySaver != null) {
+            this.memorySaver.accept(new ArrayList<>(this.messageList));
+        }
     }
 }
