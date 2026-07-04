@@ -3,9 +3,9 @@
     <section class="app-frame" aria-label="北京市山洪防御空间辅助决策智能体">
       <header class="topbar">
         <div class="brand">
-          <div class="brand-mark" aria-hidden="true">汛</div>
+          <img class="brand-mark" src="/flood-logo.png" alt="网站 logo" />
           <div>
-            <p class="brand-kicker">Fluent AI Workspace</p>
+<!--            <p class="brand-kicker">Fluent AI Workspace</p>-->
             <h1>北京市山洪防御空间辅助决策智能体</h1>
           </div>
         </div>
@@ -81,21 +81,6 @@
               <p class="section-kicker">Knowledge Base Management</p>
               <h2>知识库管理</h2>
             </div>
-            <div class="knowledge-actions">
-              <button type="button" :disabled="isKnowledgeBusy" @click="fetchDocuments">
-                刷新状态
-              </button>
-              <button type="button" class="primary" :disabled="isKnowledgeBusy" @click="openUploadDialog">
-                上传文档
-              </button>
-              <input
-                ref="fileInputRef"
-                class="file-input"
-                type="file"
-                accept=".pdf,.doc,.docx,.md,.markdown"
-                @change="handleFileSelected"
-              />
-            </div>
           </div>
 
           <div class="knowledge-tabs" role="tablist" aria-label="知识库模块">
@@ -144,6 +129,16 @@
                   <button type="button" :disabled="isKnowledgeBusy" @click="fetchDocuments">
                     刷新
                   </button>
+                  <button type="button" class="primary" :disabled="isKnowledgeBusy" @click="openUploadDialog">
+                    上传文档
+                  </button>
+                  <input
+                    ref="fileInputRef"
+                    class="file-input"
+                    type="file"
+                    accept=".pdf,.doc,.docx,.md,.markdown"
+                    @change="handleFileSelected"
+                  />
                 </div>
               </div>
 
