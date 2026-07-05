@@ -44,3 +44,33 @@ export function rebuildKnowledgeDocument(documentId) {
 export function deleteKnowledgeDocument(documentId) {
   return apiClient.delete(`/knowledge/documents/${documentId}`);
 }
+
+export function getKnowledgeGraphHealth() {
+  return apiClient.get('/knowledge/graph/health');
+}
+
+export function getKnowledgeGraphStats() {
+  return apiClient.get('/knowledge/graph/stats');
+}
+
+export function searchKnowledgeGraph(keyword, limit = 100) {
+  return apiClient.get('/knowledge/graph/search', {
+    params: { keyword, limit },
+    timeout: 120000,
+  });
+}
+
+export function visualizeKnowledgeGraph(keyword, depth = 1, limit = 300) {
+  return apiClient.get('/knowledge/graph/visualize', {
+    params: { keyword, depth, limit },
+    timeout: 120000,
+  });
+}
+
+export function getKnowledgeGraphNode(nodeId) {
+  return apiClient.get(`/knowledge/graph/nodes/${encodeURIComponent(nodeId)}`);
+}
+
+export function getKnowledgeGraphRelationship(relationshipId) {
+  return apiClient.get(`/knowledge/graph/relationships/${encodeURIComponent(relationshipId)}`);
+}

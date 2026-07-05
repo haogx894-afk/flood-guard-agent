@@ -114,14 +114,14 @@
             <button
               type="button"
               :class="{ active: knowledgeTab === 'documents' }"
-              @click="knowledgeTab = 'documents'"
+              @click="switchKnowledgeTab('documents')"
             >
               文档管理
             </button>
             <button
               type="button"
               :class="{ active: knowledgeTab === 'graph' }"
-              @click="knowledgeTab = 'graph'"
+              @click="switchKnowledgeTab('graph')"
             >
               知识图谱
             </button>
@@ -214,29 +214,15 @@
             </div>
           </section>
 
-          <section v-else class="knowledge-body graph-layout">
-            <div class="graph-card">
-              <div class="table-header">
-                <div>
-                  <h3>知识图谱</h3>
-                  <p>用于把实体、关系与向量检索结合，形成图谱增强 RAG。</p>
-                </div>
-                <span class="graph-badge">Graph RAG</span>
-              </div>
-
-              <div class="graph-canvas" aria-label="知识图谱预览">
-                <div class="graph-link link-a"></div>
-                <div class="graph-link link-b"></div>
-                <div class="graph-link link-c"></div>
-                <div class="graph-node node-main">山洪沟流域</div>
-                <div class="graph-node node-a">山区村</div>
-                <div class="graph-node node-b">安置点</div>
-                <div class="graph-node node-c">预案条款</div>
-                <div class="graph-node node-d">监测站</div>
-              </div>
+          <section v-else class="knowledge-body graph-workspace" :class="{ fullscreen: isGraphFullscreen }">
+            <div v-if="graphError" class="message-banner error">
+              {{ graphError }}
+            </div>
+            <div v-if="graphNotice" class="message-banner">
+              {{ graphNotice }}
             </div>
 
-            <div class="graph-side">
+            <div class="graph-top-grid">
               <div
                 v-for="item in graphStats"
                 :key="item.label"
@@ -245,10 +231,257 @@
                 <span>{{ item.value }}</span>
                 <p>{{ item.label }}</p>
               </div>
-              <div class="relation-card">
-                <h3>关系类型</h3>
-                <p>所属行政区、位于流域内、关联安置点、经过桥涵、引用预案条款。</p>
-              </div>
+            </div>
+
+            <div class="graph-shell">
+              <aside class="graph-control-panel">
+                <div class="panel-block">
+                  <div class="panel-title">图谱查询</div>
+                  <div class="graph-form">
+                    <label>
+                      图谱关键词
+                      <input v-model.trim="graphKeyword" type="text" placeholder="例如：张家坟村、永定河、危险区" />
+                    </label>
+                    <div class="graph-form-grid">
+                      <label>
+                        最大深度
+                        <input v-model.number="graphDepth" type="number" min="1" max="5" />
+                      </label>
+                      <label>
+                        返回节点
+                        <input v-model.number="graphLimit" type="number" min="1" max="1000" />
+                      </label>
+                    </div>
+                    <div class="graph-actions">
+                      <button type="button" class="primary" :disabled="isGraphBusy" @click="loadGraphData">
+                        查询图谱
+                      </button>
+                      <button type="button" :disabled="isGraphBusy" @click="loadGraphStats">
+                        刷新统计
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div v-if="graphSettings.showSearchBar" class="panel-block">
+                  <div class="panel-title">当前结果内搜索</div>
+                  <input
+                    v-model.trim="graphFilterKeyword"
+                    class="graph-inline-input"
+                    type="text"
+                    placeholder="过滤当前实体 / 关系"
+                  />
+                  <p class="graph-muted">
+                    当前显示 {{ visibleGraphNodes.length }} 个实体、{{ visibleGraphEdges.length }} 条关系。
+                  </p>
+                </div>
+
+                <div class="panel-block">
+                  <div class="panel-title">可视化控制</div>
+                  <div class="graph-form-grid">
+                    <label>
+                      节点大小
+                      <input v-model.number="graphNodeSize" type="range" min="22" max="86" />
+                    </label>
+                    <label>
+                      边粗细
+                      <input v-model.number="graphEdgeWidth" type="range" :min="graphEdgeMinWidth" :max="graphEdgeMaxWidth" />
+                    </label>
+                  </div>
+                  <label>
+                    图布局
+                    <select v-model="graphLayout" @change="buildNodePositions">
+                      <option value="circle">环形布局</option>
+                      <option value="grid">网格布局</option>
+                      <option value="radial">放射布局</option>
+                    </select>
+                  </label>
+                  <label>
+                    节点颜色
+                    <input v-model="selectedTypeColor" type="color" @input="applySelectedTypeColor" />
+                  </label>
+                  <p class="graph-muted">
+                    选中节点后，可为该实体类型单独设置颜色。
+                  </p>
+                  <div class="graph-tool-grid">
+                    <button type="button" @click="rotateGraph(-15)">逆时针</button>
+                    <button type="button" @click="rotateGraph(15)">顺时针</button>
+                    <button type="button" @click="zoomGraph(1.18)">放大</button>
+                    <button type="button" @click="zoomGraph(0.85)">缩小</button>
+                    <button type="button" @click="resetGraphView">重置缩放</button>
+                    <button type="button" @click="toggleGraphFullscreen">{{ isGraphFullscreen ? '退出全屏' : '全屏' }}</button>
+                  </div>
+                </div>
+
+                <div class="panel-block">
+                  <div class="panel-title">设置</div>
+                  <label class="graph-check">
+                    <input v-model="graphSettings.healthCheck" type="checkbox" @change="handleHealthCheckToggle" />
+                    健康检查
+                  </label>
+                  <label class="graph-check">
+                    <input v-model="graphSettings.showPropertyPanel" type="checkbox" />
+                    显示属性面板
+                  </label>
+                  <label class="graph-check">
+                    <input v-model="graphSettings.showSearchBar" type="checkbox" />
+                    显示搜索栏
+                  </label>
+                  <label class="graph-check">
+                    <input v-model="graphSettings.showNodeLabels" type="checkbox" />
+                    显示节点标签
+                  </label>
+                  <label class="graph-check">
+                    <input v-model="graphSettings.draggableNodes" type="checkbox" />
+                    节点可拖动
+                  </label>
+                  <label class="graph-check">
+                    <input v-model="graphSettings.showEdgeLabels" type="checkbox" />
+                    显示边标签
+                  </label>
+                  <label class="graph-check">
+                    <input v-model="graphSettings.hideUnselectedEdges" type="checkbox" />
+                    隐藏未选中的边
+                  </label>
+                  <label class="graph-check">
+                    <input v-model="graphSettings.edgeEvents" type="checkbox" />
+                    边事件
+                  </label>
+                  <label class="graph-check">
+                    <input v-model="graphSettings.boxSelect" type="checkbox" />
+                    框选
+                  </label>
+                  <div class="graph-form-grid">
+                    <label>
+                      边最小
+                      <input v-model.number="graphEdgeMinWidth" type="number" min="1" max="8" />
+                    </label>
+                    <label>
+                      边最大
+                      <input v-model.number="graphEdgeMaxWidth" type="number" min="1" max="12" />
+                    </label>
+                  </div>
+                </div>
+              </aside>
+
+              <section class="graph-main-card">
+                <div class="graph-toolbar">
+                  <div>
+                    <h3>知识图谱可视化</h3>
+                    <p>
+                      {{ graphKeyword || '默认图谱' }} ·
+                      {{ visibleGraphNodes.length }} 个实体 ·
+                      {{ visibleGraphEdges.length }} 条关系
+                    </p>
+                  </div>
+                  <span class="graph-badge" :class="{ online: graphHealth?.connected }">
+                    {{ graphHealth?.connected ? 'Neo4j 已连接' : 'Graph RAG' }}
+                  </span>
+                </div>
+
+                <div
+                  ref="graphCanvasRef"
+                  class="graph-visual-canvas"
+                  :class="{ selecting: graphSettings.boxSelect }"
+                  @wheel.prevent="handleGraphWheel"
+                  @mousedown.self="startBoxSelect"
+                  @mousemove="handleGraphMouseMove"
+                  @mouseup="endGraphPointerAction"
+                  @mouseleave="endGraphPointerAction"
+                >
+                  <svg class="graph-svg" viewBox="0 0 1000 620" role="img" aria-label="知识图谱可视化">
+                    <g :transform="graphTransform">
+                      <line
+                        v-for="edge in visibleGraphEdges"
+                        :key="edge.id"
+                        :x1="getNodePosition(edge.source).x"
+                        :y1="getNodePosition(edge.source).y"
+                        :x2="getNodePosition(edge.target).x"
+                        :y2="getNodePosition(edge.target).y"
+                        :class="['graph-edge-line', { active: isEdgeActive(edge), dimmed: isEdgeDimmed(edge) }]"
+                        :stroke-width="getEdgeWidth(edge)"
+                        @click.stop="selectEdge(edge)"
+                      />
+                      <text
+                        v-for="edge in edgeLabels"
+                        :key="`${edge.id}-label`"
+                        class="graph-edge-label"
+                        :x="getEdgeLabelPosition(edge).x"
+                        :y="getEdgeLabelPosition(edge).y"
+                        @click.stop="selectEdge(edge)"
+                      >
+                        {{ edge.type }}
+                      </text>
+
+                      <g
+                        v-for="node in visibleGraphNodes"
+                        :key="node.id"
+                        :class="['graph-node-svg', { active: isNodeSelected(node), related: isNodeRelated(node), dimmed: isNodeDimmed(node) }]"
+                        :transform="`translate(${getNodePosition(node.id).x}, ${getNodePosition(node.id).y})`"
+                        @mousedown.stop="startNodeDrag(node, $event)"
+                        @click.stop="selectNode(node)"
+                      >
+                        <circle
+                          :r="getNodeRadius(node)"
+                          :fill="getNodeColor(node)"
+                        />
+                        <text
+                          v-if="graphSettings.showNodeLabels"
+                          text-anchor="middle"
+                          :y="getNodeRadius(node) + 17"
+                        >
+                          {{ getShortLabel(node.label) }}
+                        </text>
+                      </g>
+                    </g>
+                  </svg>
+                  <div v-if="boxSelection.active" class="box-selection" :style="boxSelectionStyle"></div>
+                  <div v-if="isGraphBusy" class="graph-loading">正在加载图谱数据...</div>
+                  <div v-else-if="visibleGraphNodes.length === 0" class="graph-empty">请输入关键词查询图谱，或点击“查询图谱”加载默认子图。</div>
+                </div>
+              </section>
+
+              <aside v-if="graphSettings.showPropertyPanel" class="graph-property-panel">
+                <div class="panel-title">属性面板</div>
+                <div v-if="selectedGraphItem" class="property-card">
+                  <div class="property-title">
+                    <span>{{ selectedGraphItem.kind === 'node' ? '实体' : '关系' }}</span>
+                    <strong>{{ selectedGraphItem.title }}</strong>
+                  </div>
+                  <div class="property-list">
+                    <div
+                      v-for="item in selectedProperties"
+                      :key="item.key"
+                      class="property-row"
+                    >
+                      <span>{{ item.key }}</span>
+                      <b>{{ item.value }}</b>
+                    </div>
+                  </div>
+                </div>
+                <div v-else class="graph-empty small">
+                  点击一个实体或关系，查看具体属性。
+                </div>
+
+                <div v-if="graphHealth && graphSettings.healthCheck" class="relation-card">
+                  <h3>健康检查</h3>
+                  <p>{{ graphHealth.connected ? 'Neo4j 连接正常' : graphHealth.message }}</p>
+                </div>
+
+                <div class="relation-card">
+                  <h3>实体类型</h3>
+                  <p v-for="item in topNodeLabels" :key="item.name">
+                    {{ item.name }}：{{ item.count }}
+                  </p>
+                </div>
+
+                <div class="relation-card">
+                  <h3>关系类型</h3>
+                  <p v-for="item in topRelationshipTypes" :key="item.name">
+                    {{ item.name }}：{{ item.count }}
+                  </p>
+                </div>
+              </aside>
             </div>
           </section>
         </section>
@@ -263,9 +496,15 @@ import ChatMessage from './components/ChatMessage.vue';
 import {
   buildManusSseUrl,
   deleteKnowledgeDocument,
+  getKnowledgeGraphHealth,
+  getKnowledgeGraphNode,
+  getKnowledgeGraphRelationship,
+  getKnowledgeGraphStats,
   getKnowledgeDocuments,
   rebuildKnowledgeDocument,
+  searchKnowledgeGraph,
   uploadKnowledgeDocument,
+  visualizeKnowledgeGraph,
 } from './services/api';
 
 const CHAT_ID_STORAGE_KEY = 'hgx-ai-agent-chat-id';
@@ -283,14 +522,90 @@ const knowledgeError = ref('');
 const knowledgeNotice = ref('');
 const fileInputRef = ref(null);
 
+const graphHealth = ref(null);
+const graphStatsData = ref(null);
+const graphSearchResult = ref(null);
+const graphData = ref({ nodes: [], edges: [] });
+const graphKeyword = ref('');
+const graphFilterKeyword = ref('');
+const graphDepth = ref(1);
+const graphLimit = ref(300);
+const graphLayout = ref('circle');
+const graphNodeSize = ref(38);
+const graphEdgeWidth = ref(2);
+const graphEdgeMinWidth = ref(1);
+const graphEdgeMaxWidth = ref(6);
+const graphZoom = ref(1);
+const graphRotation = ref(0);
+const isGraphFullscreen = ref(false);
+const isLoadingGraph = ref(false);
+const isLoadingGraphStats = ref(false);
+const isLoadingGraphHealth = ref(false);
+const graphError = ref('');
+const graphNotice = ref('');
+const selectedGraphItem = ref(null);
+const selectedTypeColor = ref('#0078d4');
+const customTypeColors = ref({});
+const draggedNode = ref(null);
+const boxSelectedNodeIds = ref(new Set());
+const nodePositions = ref({});
+const graphCanvasRef = ref(null);
+const boxSelection = ref({
+  active: false,
+  startX: 0,
+  startY: 0,
+  currentX: 0,
+  currentY: 0,
+});
+
+const graphSettings = ref({
+  healthCheck: true,
+  showPropertyPanel: true,
+  showSearchBar: true,
+  showNodeLabels: true,
+  draggableNodes: true,
+  showEdgeLabels: true,
+  hideUnselectedEdges: false,
+  edgeEvents: true,
+  boxSelect: true,
+});
+
+const colorPalette = [
+  '#0078d4',
+  '#107c10',
+  '#d83b01',
+  '#5c2d91',
+  '#038387',
+  '#c239b3',
+  '#8a8886',
+  '#e81123',
+  '#498205',
+  '#8764b8',
+  '#00b7c3',
+  '#ffaa44',
+  '#006666',
+  '#b146c2',
+  '#4f6bed',
+  '#ca5010',
+  '#0b6a0b',
+  '#881798',
+  '#005a9e',
+  '#986f0b',
+];
+
 const graphStats = computed(() => [
-  { label: '实体', value: '-' },
-  { label: '关系', value: '-' },
-  { label: '入库文档', value: knowledgeDocuments.value.length },
+  { label: '实体总数', value: formatNumber(graphStatsData.value?.totalNodes) },
+  { label: '关系总数', value: formatNumber(graphStatsData.value?.totalRelationships) },
+  { label: '搜索实体', value: formatNumber(graphSearchResult.value?.nodeCount) },
+  { label: '搜索关系', value: formatNumber(graphSearchResult.value?.relationshipCount) },
 ]);
 
 const isKnowledgeBusy = computed(
-  () => isLoadingDocuments.value || isUploadingDocument.value || Boolean(operatingDocumentId.value)
+  () => isLoadingDocuments.value || isUploadingDocument.value || Boolean(operatingDocumentId.value) || isGraphBusy.value
+);
+
+const isGraphBusy = computed(
+  () => isLoadingGraph.value || isLoadingGraphStats.value || isLoadingGraphHealth.value
 );
 
 const documentStats = computed(() => {
@@ -318,6 +633,122 @@ const documentRows = computed(() =>
     updatedAt: formatDateTime(doc.updatedAt),
   }))
 );
+
+const visibleGraphNodes = computed(() => {
+  const keyword = graphFilterKeyword.value.toLowerCase();
+  if (!keyword) {
+    return graphData.value.nodes;
+  }
+
+  const matchedNodeIds = new Set();
+  graphData.value.nodes.forEach((node) => {
+    if (matchesGraphText(node, keyword)) {
+      matchedNodeIds.add(node.id);
+    }
+  });
+  graphData.value.edges.forEach((edge) => {
+    if (matchesGraphText(edge, keyword)) {
+      matchedNodeIds.add(edge.source);
+      matchedNodeIds.add(edge.target);
+    }
+  });
+
+  return graphData.value.nodes.filter((node) => matchedNodeIds.has(node.id));
+});
+
+const visibleGraphNodeIds = computed(() => new Set(visibleGraphNodes.value.map((node) => node.id)));
+
+const visibleGraphEdges = computed(() => {
+  const keyword = graphFilterKeyword.value.toLowerCase();
+  return graphData.value.edges.filter((edge) => {
+    const hasVisibleEndpoint = visibleGraphNodeIds.value.has(edge.source) && visibleGraphNodeIds.value.has(edge.target);
+    if (!hasVisibleEndpoint) {
+      return false;
+    }
+    if (graphSettings.value.hideUnselectedEdges && selectedGraphItem.value && !activeEdgeIds.value.has(edge.id)) {
+      return false;
+    }
+    return !keyword || matchesGraphText(edge, keyword) || visibleGraphNodeIds.value.has(edge.source) || visibleGraphNodeIds.value.has(edge.target);
+  });
+});
+
+const edgeLabels = computed(() => (graphSettings.value.showEdgeLabels ? visibleGraphEdges.value : []));
+
+const selectedProperties = computed(() => {
+  if (!selectedGraphItem.value) {
+    return [];
+  }
+  return Object.entries(selectedGraphItem.value.properties || {}).map(([key, value]) => ({
+    key,
+    value: formatPropertyValue(value),
+  }));
+});
+
+const topNodeLabels = computed(() => graphStatsData.value?.nodeLabels?.slice(0, 8) || []);
+const topRelationshipTypes = computed(() => graphStatsData.value?.relationshipTypes?.slice(0, 8) || []);
+
+const selectedNodeIds = computed(() => {
+  if (!selectedGraphItem.value) {
+    return new Set();
+  }
+  if (selectedGraphItem.value.kind === 'box') {
+    return new Set(boxSelectedNodeIds.value);
+  }
+  if (selectedGraphItem.value.kind === 'node') {
+    return new Set([selectedGraphItem.value.id]);
+  }
+  return new Set([selectedGraphItem.value.source, selectedGraphItem.value.target]);
+});
+
+const relatedNodeIds = computed(() => {
+  if (!selectedGraphItem.value) {
+    return new Set();
+  }
+
+  const ids = new Set(selectedNodeIds.value);
+  visibleGraphEdges.value.forEach((edge) => {
+    if (ids.has(edge.source)) {
+      ids.add(edge.target);
+    }
+    if (ids.has(edge.target)) {
+      ids.add(edge.source);
+    }
+  });
+  return ids;
+});
+
+const activeEdgeIds = computed(() => {
+  if (!selectedGraphItem.value) {
+    return new Set();
+  }
+  if (selectedGraphItem.value.kind === 'edge') {
+    return new Set([selectedGraphItem.value.id]);
+  }
+  return new Set(
+    graphData.value.edges
+      .filter((edge) => selectedNodeIds.value.has(edge.source) || selectedNodeIds.value.has(edge.target))
+      .map((edge) => edge.id)
+  );
+});
+
+const graphTransform = computed(() => {
+  const rotation = graphRotation.value;
+  const zoom = graphZoom.value;
+  return `translate(500 310) rotate(${rotation}) scale(${zoom}) translate(-500 -310)`;
+});
+
+const boxSelectionStyle = computed(() => {
+  const left = Math.min(boxSelection.value.startX, boxSelection.value.currentX);
+  const top = Math.min(boxSelection.value.startY, boxSelection.value.currentY);
+  const width = Math.abs(boxSelection.value.currentX - boxSelection.value.startX);
+  const height = Math.abs(boxSelection.value.currentY - boxSelection.value.startY);
+  return {
+    left: `${left}px`,
+    top: `${top}px`,
+    width: `${width}px`,
+    height: `${height}px`,
+  };
+});
 
 function getOrCreateChatId() {
   let chatId = localStorage.getItem(CHAT_ID_STORAGE_KEY);
@@ -354,7 +785,428 @@ async function switchView(view) {
   activeView.value = view;
   if (view === 'knowledge') {
     await fetchDocuments();
+    if (knowledgeTab.value === 'graph') {
+      await loadGraphInitialData();
+    }
   }
+}
+
+async function switchKnowledgeTab(tab) {
+  knowledgeTab.value = tab;
+  if (tab === 'documents') {
+    await fetchDocuments();
+  }
+  if (tab === 'graph') {
+    await loadGraphInitialData();
+  }
+}
+
+async function loadGraphInitialData() {
+  if (!graphStatsData.value) {
+    await loadGraphStats();
+  }
+  if (graphSettings.value.healthCheck && !graphHealth.value) {
+    await loadGraphHealth();
+  }
+  if (graphData.value.nodes.length === 0) {
+    await loadGraphData();
+  }
+}
+
+async function loadGraphHealth() {
+  graphError.value = '';
+  isLoadingGraphHealth.value = true;
+  try {
+    const { data } = await getKnowledgeGraphHealth();
+    graphHealth.value = data;
+  } catch (error) {
+    graphError.value = getErrorMessage(error, 'Neo4j 健康检查失败');
+  } finally {
+    isLoadingGraphHealth.value = false;
+  }
+}
+
+async function loadGraphStats() {
+  graphError.value = '';
+  isLoadingGraphStats.value = true;
+  try {
+    const { data } = await getKnowledgeGraphStats();
+    graphStatsData.value = data;
+  } catch (error) {
+    graphError.value = getErrorMessage(error, '加载知识图谱统计失败');
+  } finally {
+    isLoadingGraphStats.value = false;
+  }
+}
+
+async function loadGraphData() {
+  graphError.value = '';
+  graphNotice.value = '';
+  isLoadingGraph.value = true;
+  selectedGraphItem.value = null;
+
+  try {
+    const safeDepth = clampNumber(graphDepth.value, 1, 5, 1);
+    const safeLimit = clampNumber(graphLimit.value, 1, 1000, 300);
+    graphDepth.value = safeDepth;
+    graphLimit.value = safeLimit;
+
+    const [searchResponse, visualizeResponse] = await Promise.all([
+      searchKnowledgeGraph(graphKeyword.value, safeLimit),
+      visualizeKnowledgeGraph(graphKeyword.value, safeDepth, safeLimit),
+    ]);
+
+    graphSearchResult.value = searchResponse.data;
+    graphData.value = normalizeGraphData(visualizeResponse.data);
+    graphFilterKeyword.value = '';
+    buildNodePositions();
+
+    if (graphData.value.nodes.length === 0) {
+      graphNotice.value = '当前关键词没有查询到可视化图谱结果，可以换一个村名、河流名、站点名或危险区名称。';
+    }
+  } catch (error) {
+    graphError.value = getErrorMessage(error, '加载知识图谱失败');
+  } finally {
+    isLoadingGraph.value = false;
+  }
+}
+
+function handleHealthCheckToggle() {
+  if (graphSettings.value.healthCheck) {
+    loadGraphHealth();
+  }
+}
+
+function normalizeGraphData(data) {
+  return {
+    nodes: Array.isArray(data?.nodes) ? data.nodes : [],
+    edges: Array.isArray(data?.edges) ? data.edges : [],
+  };
+}
+
+function buildNodePositions() {
+  const nodes = graphData.value.nodes;
+  const total = Math.max(nodes.length, 1);
+  const positions = { ...nodePositions.value };
+  const centerX = 500;
+  const centerY = 310;
+  const radius = Math.min(260, Math.max(110, 26 * Math.sqrt(total)));
+
+  nodes.forEach((node, index) => {
+    if (positions[node.id]) {
+      return;
+    }
+
+    if (graphLayout.value === 'grid') {
+      const columns = Math.ceil(Math.sqrt(total));
+      const spacingX = Math.min(150, 820 / Math.max(columns, 1));
+      const spacingY = 92;
+      const row = Math.floor(index / columns);
+      const col = index % columns;
+      positions[node.id] = {
+        x: 120 + col * spacingX,
+        y: 90 + row * spacingY,
+      };
+      return;
+    }
+
+    if (graphLayout.value === 'radial') {
+      const typeIndex = getTypeIndex(node.type);
+      const layerRadius = 90 + (typeIndex % 4) * 70;
+      const angle = (index / total) * Math.PI * 2 + typeIndex * 0.34;
+      positions[node.id] = {
+        x: centerX + Math.cos(angle) * layerRadius,
+        y: centerY + Math.sin(angle) * layerRadius,
+      };
+      return;
+    }
+
+    const angle = (index / total) * Math.PI * 2 - Math.PI / 2;
+    positions[node.id] = {
+      x: centerX + Math.cos(angle) * radius,
+      y: centerY + Math.sin(angle) * radius,
+    };
+  });
+
+  nodePositions.value = positions;
+}
+
+function getNodePosition(nodeId) {
+  return nodePositions.value[nodeId] || { x: 500, y: 310 };
+}
+
+function getEdgeLabelPosition(edge) {
+  const source = getNodePosition(edge.source);
+  const target = getNodePosition(edge.target);
+  return {
+    x: (source.x + target.x) / 2,
+    y: (source.y + target.y) / 2 - 6,
+  };
+}
+
+function getNodeRadius(node) {
+  const labelLength = String(node.label || '').length;
+  return Math.min(graphNodeSize.value + labelLength * 1.6, 92);
+}
+
+function getEdgeWidth(edge) {
+  const rank = Number(edge.properties?.rank || 1);
+  const base = Number.isFinite(rank) ? Math.min(Math.max(rank, graphEdgeMinWidth.value), graphEdgeMaxWidth.value) : graphEdgeWidth.value;
+  return Math.min(Math.max(base, graphEdgeMinWidth.value), graphEdgeMaxWidth.value);
+}
+
+function getNodeColor(node) {
+  if (customTypeColors.value[node.type]) {
+    return customTypeColors.value[node.type];
+  }
+  return colorPalette[getTypeIndex(node.type) % colorPalette.length];
+}
+
+function getTypeIndex(type) {
+  const types = [...new Set(graphData.value.nodes.map((node) => node.type || 'Entity'))];
+  return Math.max(types.indexOf(type || 'Entity'), 0);
+}
+
+function applySelectedTypeColor() {
+  if (!selectedGraphItem.value || selectedGraphItem.value.kind !== 'node') {
+    return;
+  }
+  customTypeColors.value = {
+    ...customTypeColors.value,
+    [selectedGraphItem.value.type]: selectedTypeColor.value,
+  };
+}
+
+async function selectNode(node) {
+  boxSelectedNodeIds.value = new Set();
+  selectedGraphItem.value = {
+    kind: 'node',
+    id: node.id,
+    title: node.label,
+    type: node.type,
+    properties: node.properties,
+  };
+  selectedTypeColor.value = getNodeColor(node);
+
+  try {
+    const { data } = await getKnowledgeGraphNode(node.elementId || node.id);
+    selectedGraphItem.value = {
+      kind: 'node',
+      id: data.id,
+      title: data.label,
+      type: data.type,
+      properties: data.properties || {},
+    };
+    selectedTypeColor.value = getNodeColor(data);
+  } catch {
+    // 当前可视化数据里已经有属性，详情接口失败时保持本地属性。
+  }
+}
+
+async function selectEdge(edge) {
+  if (!graphSettings.value.edgeEvents) {
+    return;
+  }
+
+  boxSelectedNodeIds.value = new Set();
+  selectedGraphItem.value = {
+    kind: 'edge',
+    id: edge.id,
+    title: edge.type,
+    source: edge.source,
+    target: edge.target,
+    properties: edge.properties,
+  };
+
+  try {
+    const { data } = await getKnowledgeGraphRelationship(edge.id);
+    selectedGraphItem.value = {
+      kind: 'edge',
+      id: data.id,
+      title: data.type,
+      source: data.source,
+      target: data.target,
+      properties: data.properties || {},
+    };
+  } catch {
+    // 当前可视化数据里已经有属性，详情接口失败时保持本地属性。
+  }
+}
+
+function isNodeSelected(node) {
+  return selectedNodeIds.value.has(node.id);
+}
+
+function isNodeRelated(node) {
+  return relatedNodeIds.value.has(node.id);
+}
+
+function isNodeDimmed(node) {
+  return selectedGraphItem.value && !isNodeRelated(node);
+}
+
+function isEdgeActive(edge) {
+  return activeEdgeIds.value.has(edge.id);
+}
+
+function isEdgeDimmed(edge) {
+  return Boolean(selectedGraphItem.value) && !isEdgeActive(edge);
+}
+
+function zoomGraph(ratio) {
+  graphZoom.value = Math.min(Math.max(graphZoom.value * ratio, 0.2), 4);
+}
+
+function rotateGraph(deg) {
+  graphRotation.value = (graphRotation.value + deg) % 360;
+}
+
+function resetGraphView() {
+  graphZoom.value = 1;
+  graphRotation.value = 0;
+  buildNodePositions();
+}
+
+function toggleGraphFullscreen() {
+  isGraphFullscreen.value = !isGraphFullscreen.value;
+}
+
+function handleGraphWheel(event) {
+  zoomGraph(event.deltaY < 0 ? 1.08 : 0.92);
+}
+
+function startNodeDrag(node, event) {
+  if (!graphSettings.value.draggableNodes) {
+    return;
+  }
+  draggedNode.value = {
+    id: node.id,
+    startX: event.clientX,
+    startY: event.clientY,
+    origin: getNodePosition(node.id),
+  };
+}
+
+function handleGraphMouseMove(event) {
+  if (draggedNode.value) {
+    const scale = graphZoom.value || 1;
+    const dx = (event.clientX - draggedNode.value.startX) / scale;
+    const dy = (event.clientY - draggedNode.value.startY) / scale;
+    nodePositions.value = {
+      ...nodePositions.value,
+      [draggedNode.value.id]: {
+        x: draggedNode.value.origin.x + dx,
+        y: draggedNode.value.origin.y + dy,
+      },
+    };
+    return;
+  }
+
+  if (boxSelection.value.active) {
+    const rect = graphCanvasRef.value?.getBoundingClientRect();
+    if (!rect) {
+      return;
+    }
+    boxSelection.value.currentX = event.clientX - rect.left;
+    boxSelection.value.currentY = event.clientY - rect.top;
+  }
+}
+
+function endGraphPointerAction() {
+  draggedNode.value = null;
+  if (boxSelection.value.active) {
+    finishBoxSelect();
+  }
+  boxSelection.value.active = false;
+}
+
+function startBoxSelect(event) {
+  if (!graphSettings.value.boxSelect) {
+    return;
+  }
+  const rect = graphCanvasRef.value?.getBoundingClientRect();
+  if (!rect) {
+    return;
+  }
+  const x = event.clientX - rect.left;
+  const y = event.clientY - rect.top;
+  boxSelection.value = {
+    active: true,
+    startX: x,
+    startY: y,
+    currentX: x,
+    currentY: y,
+  };
+}
+
+function finishBoxSelect() {
+  const rect = graphCanvasRef.value?.getBoundingClientRect();
+  if (!rect) {
+    return;
+  }
+
+  const left = Math.min(boxSelection.value.startX, boxSelection.value.currentX);
+  const right = Math.max(boxSelection.value.startX, boxSelection.value.currentX);
+  const top = Math.min(boxSelection.value.startY, boxSelection.value.currentY);
+  const bottom = Math.max(boxSelection.value.startY, boxSelection.value.currentY);
+  const width = Math.max(rect.width, 1);
+  const height = Math.max(rect.height, 1);
+
+  const selectedIds = visibleGraphNodes.value
+    .filter((node) => {
+      const position = getNodePosition(node.id);
+      const screenX = (position.x / 1000) * width;
+      const screenY = (position.y / 620) * height;
+      return screenX >= left && screenX <= right && screenY >= top && screenY <= bottom;
+    })
+    .map((node) => node.id);
+
+  boxSelectedNodeIds.value = new Set(selectedIds);
+  if (selectedIds.length > 0) {
+    selectedGraphItem.value = {
+      kind: 'box',
+      title: `已框选 ${selectedIds.length} 个实体`,
+      properties: {
+        selectedCount: selectedIds.length,
+        selectedIds: selectedIds.join('、'),
+      },
+    };
+  }
+}
+
+function matchesGraphText(item, keyword) {
+  const text = JSON.stringify(item || {}).toLowerCase();
+  return text.includes(keyword);
+}
+
+function getShortLabel(label) {
+  const text = String(label || '-');
+  return text.length > 10 ? `${text.slice(0, 10)}...` : text;
+}
+
+function formatNumber(value) {
+  if (value === undefined || value === null || value === '') {
+    return '-';
+  }
+  return Number(value).toLocaleString('zh-CN');
+}
+
+function clampNumber(value, min, max, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    return fallback;
+  }
+  return Math.min(Math.max(number, min), max);
+}
+
+function formatPropertyValue(value) {
+  if (value === null || value === undefined) {
+    return '-';
+  }
+  if (typeof value === 'object') {
+    return JSON.stringify(value);
+  }
+  return String(value);
 }
 
 function getStatusText(status) {
