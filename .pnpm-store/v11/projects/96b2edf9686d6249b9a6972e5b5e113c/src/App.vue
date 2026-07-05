@@ -39,11 +39,11 @@
         <section v-if="activeView === 'chat'" class="chat-card fluent-card">
           <div class="chat-card-header">
             <div>
-              <p class="section-kicker">AI 防汛管家</p>
-              <h2>空间辅助决策会话</h2>
+<!--              <p class="section-kicker">AI 防汛管家</p>-->
+              <h2>山洪防御空间辅助决策会话</h2>
             </div>
             <div class="chat-meta">
-              <span>{{ messages.length }} 条消息</span>
+              <span>{{ messages.length }} 条消息记录</span>
               <span>{{ isStreaming ? '生成中' : '待命' }}</span>
             </div>
           </div>
