@@ -83,13 +83,14 @@ public class KnowledgeGraphService {
 
     public GraphSearchResult search(String keyword, int limit) {
         String safeKeyword = cleanKeyword(keyword);
+        List<String> searchTerms = buildSearchTerms(safeKeyword);
         int safeLimit = safeLimit(limit);
 
         try (Session session = driver.session()) {
-            long nodeCount = countSearchNodes(session, safeKeyword);
-            long relationshipCount = countSearchRelationships(session, safeKeyword);
-            List<GraphNode> nodes = querySearchNodes(session, safeKeyword, safeLimit);
-            List<GraphEdge> edges = querySearchRelationships(session, safeKeyword, safeLimit);
+            long nodeCount = countSearchNodes(session, safeKeyword, searchTerms);
+            long relationshipCount = countSearchRelationships(session, safeKeyword, searchTerms);
+            List<GraphNode> nodes = querySearchNodes(session, safeKeyword, searchTerms, safeLimit);
+            List<GraphEdge> edges = querySearchRelationships(session, safeKeyword, searchTerms, safeLimit);
 
             return new GraphSearchResult(safeKeyword, nodeCount, relationshipCount, nodes, edges);
         }
@@ -141,6 +142,7 @@ public class KnowledgeGraphService {
 
     public GraphData visualize(String keyword, int depth, int limit) {
         String safeKeyword = cleanKeyword(keyword);
+        List<String> searchTerms = buildSearchTerms(safeKeyword);
         int safeDepth = safeDepth(depth);
         int safeLimit = safeLimit(limit);
 
@@ -148,7 +150,7 @@ public class KnowledgeGraphService {
             if (!StringUtils.hasText(safeKeyword)) {
                 return queryDefaultGraph(session, safeLimit);
             }
-            return queryKeywordGraph(session, safeKeyword, safeDepth, safeLimit);
+            return queryKeywordGraph(session, searchTerms, safeDepth, safeLimit);
         }
     }
 
@@ -203,11 +205,13 @@ public class KnowledgeGraphService {
         return trimGraphData(mapPaths(result), limit);
     }
 
-    private GraphData queryKeywordGraph(Session session, String keyword, int depth, int limit) {
+    private GraphData queryKeywordGraph(Session session, List<String> searchTerms, int depth, int limit) {
         String cypher = """
                 MATCH (start)
-                WHERE any(label IN labels(start) WHERE label CONTAINS $keyword)
-                   OR any(key IN keys(start) WHERE toString(start[key]) CONTAINS $keyword)
+                WHERE any(term IN $terms WHERE term <> '' AND (
+                    any(label IN labels(start) WHERE label CONTAINS term)
+                    OR any(key IN keys(start) WHERE toString(start[key]) CONTAINS term)
+                ))
                 WITH start
                 LIMIT 20
                 MATCH p=(start)-[*1..%d]-(neighbor)
@@ -215,57 +219,65 @@ public class KnowledgeGraphService {
                 LIMIT %d
                 """.formatted(depth, limit);
 
-        Result result = session.run(cypher, parameters("keyword", keyword));
+        Result result = session.run(cypher, parameters("terms", searchTerms));
         return trimGraphData(mapPaths(result), limit);
     }
 
-    private long countSearchNodes(Session session, String keyword) {
+    private long countSearchNodes(Session session, String keyword, List<String> searchTerms) {
         return session.run("""
                         MATCH (n)
                         WHERE $keyword = ''
-                           OR any(label IN labels(n) WHERE label CONTAINS $keyword)
-                           OR any(key IN keys(n) WHERE toString(n[key]) CONTAINS $keyword)
+                           OR any(term IN $terms WHERE term <> '' AND (
+                               any(label IN labels(n) WHERE label CONTAINS term)
+                               OR any(key IN keys(n) WHERE toString(n[key]) CONTAINS term)
+                           ))
                         RETURN count(n) AS total
                         """,
-                parameters("keyword", keyword)
+                parameters("keyword", keyword, "terms", searchTerms)
         ).single().get("total").asLong();
     }
 
-    private long countSearchRelationships(Session session, String keyword) {
+    private long countSearchRelationships(Session session, String keyword, List<String> searchTerms) {
         return session.run("""
                         MATCH (a)-[r]->(b)
                         WHERE $keyword = ''
-                           OR type(r) CONTAINS $keyword
-                           OR any(key IN keys(r) WHERE toString(r[key]) CONTAINS $keyword)
-                           OR any(key IN keys(a) WHERE toString(a[key]) CONTAINS $keyword)
-                           OR any(key IN keys(b) WHERE toString(b[key]) CONTAINS $keyword)
+                           OR any(term IN $terms WHERE term <> '' AND (
+                               type(r) CONTAINS term
+                               OR any(key IN keys(r) WHERE toString(r[key]) CONTAINS term)
+                               OR any(key IN keys(a) WHERE toString(a[key]) CONTAINS term)
+                               OR any(key IN keys(b) WHERE toString(b[key]) CONTAINS term)
+                           ))
                         RETURN count(r) AS total
                         """,
-                parameters("keyword", keyword)
+                parameters("keyword", keyword, "terms", searchTerms)
         ).single().get("total").asLong();
     }
 
-    private List<GraphNode> querySearchNodes(Session session, String keyword, int limit) {
+    private List<GraphNode> querySearchNodes(Session session, String keyword, List<String> searchTerms, int limit) {
         return session.run("""
                         MATCH (n)
                         WHERE $keyword = ''
-                           OR any(label IN labels(n) WHERE label CONTAINS $keyword)
-                           OR any(key IN keys(n) WHERE toString(n[key]) CONTAINS $keyword)
+                           OR any(term IN $terms WHERE term <> '' AND (
+                               any(label IN labels(n) WHERE label CONTAINS term)
+                               OR any(key IN keys(n) WHERE toString(n[key]) CONTAINS term)
+                           ))
                         RETURN elementId(n) AS elementId, labels(n) AS labels, properties(n) AS properties
                         LIMIT %d
                         """.formatted(limit),
-                parameters("keyword", keyword)
+                parameters("keyword", keyword, "terms", searchTerms)
         ).list(this::mapNodeRecord);
     }
 
-    private List<GraphEdge> querySearchRelationships(Session session, String keyword, int limit) {
+    private List<GraphEdge> querySearchRelationships(Session session, String keyword, List<String> searchTerms, int limit) {
         return session.run("""
                         MATCH (a)-[r]->(b)
                         WHERE $keyword = ''
-                           OR type(r) CONTAINS $keyword
-                           OR any(key IN keys(r) WHERE toString(r[key]) CONTAINS $keyword)
-                           OR any(key IN keys(a) WHERE toString(a[key]) CONTAINS $keyword)
-                           OR any(key IN keys(b) WHERE toString(b[key]) CONTAINS $keyword)
+                           OR any(term IN $terms WHERE term <> '' AND (
+                               type(r) CONTAINS term
+                               OR any(key IN keys(r) WHERE toString(r[key]) CONTAINS term)
+                               OR any(key IN keys(a) WHERE toString(a[key]) CONTAINS term)
+                               OR any(key IN keys(b) WHERE toString(b[key]) CONTAINS term)
+                           ))
                         RETURN elementId(r) AS id,
                                type(r) AS type,
                                coalesce(a.vid, elementId(a)) AS source,
@@ -273,7 +285,7 @@ public class KnowledgeGraphService {
                                properties(r) AS properties
                         LIMIT %d
                         """.formatted(limit),
-                parameters("keyword", keyword)
+                parameters("keyword", keyword, "terms", searchTerms)
         ).list(this::mapEdgeRecord);
     }
 
@@ -391,6 +403,65 @@ public class KnowledgeGraphService {
 
     private String cleanKeyword(String keyword) {
         return keyword == null ? "" : keyword.trim();
+    }
+
+    private List<String> buildSearchTerms(String keyword) {
+        LinkedHashSet<String> terms = new LinkedHashSet<>();
+        String cleaned = cleanKeyword(keyword);
+        if (!StringUtils.hasText(cleaned)) {
+            return List.of();
+        }
+
+        addSearchTerm(terms, cleaned);
+
+        String normalized = cleaned
+                .replace("？", " ")
+                .replace("?", " ")
+                .replace("，", " ")
+                .replace(",", " ")
+                .replace("。", " ")
+                .replace("；", " ")
+                .replace(";", " ")
+                .replace("：", " ")
+                .replace(":", " ")
+                .replace("、", " ")
+                .replace("的信息", " ")
+                .replace("的情况", " ")
+                .replace("情况", " ")
+                .replace("信息", " ")
+                .replace("有哪些", " ")
+                .replace("有多少", " ")
+                .replace("多少", " ")
+                .replace("是什么", " ")
+                .replace("是谁", " ");
+
+        for (String part : normalized.split("\\s+|的")) {
+            addSearchTerm(terms, part);
+        }
+
+        return terms.stream()
+                .filter(term -> term.length() >= 2)
+                .limit(12)
+                .toList();
+    }
+
+    private void addSearchTerm(LinkedHashSet<String> terms, String value) {
+        String term = cleanKeyword(value);
+        if (!StringUtils.hasText(term)) {
+            return;
+        }
+
+        terms.add(term);
+
+        int chineseParenIndex = term.indexOf('（');
+        if (chineseParenIndex > 0) {
+            terms.add(term.substring(0, chineseParenIndex).trim());
+        }
+
+        int englishParenIndex = term.indexOf('(');
+        if (englishParenIndex > 0) {
+            terms.add(term.substring(0, englishParenIndex).trim());
+        }
     }
 
     private Map<String, Object> orderedMap(Map<String, Object> source) {

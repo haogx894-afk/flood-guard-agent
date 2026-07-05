@@ -234,9 +234,33 @@
             </div>
 
             <div class="graph-shell">
-              <aside class="graph-control-panel">
-                <div class="panel-block">
+              <button
+                v-if="isGraphControlCollapsed"
+                type="button"
+                class="floating-tab left"
+                @click="isGraphControlCollapsed = false"
+              >
+                图谱查询
+              </button>
+              <button
+                v-if="isGraphPropertyCollapsed"
+                type="button"
+                class="floating-tab right"
+                @click="isGraphPropertyCollapsed = false"
+              >
+                属性面板
+              </button>
+
+              <aside
+                v-if="!isGraphControlCollapsed"
+                class="graph-control-panel floating-panel"
+                :style="floatingPanelStyle(graphControlPanelPosition)"
+              >
+                <div class="floating-panel-header" @mousedown="startFloatingPanelDrag('control', $event)">
                   <div class="panel-title">图谱查询</div>
+                  <button type="button" @mousedown.stop @click.stop="isGraphControlCollapsed = true">收起</button>
+                </div>
+                <div class="panel-block">
                   <div class="graph-form">
                     <label>
                       图谱关键词
@@ -290,7 +314,7 @@
                   </div>
                   <label>
                     图布局
-                    <select v-model="graphLayout" @change="buildNodePositions">
+                    <select v-model="graphLayout" @change="rebuildNodePositions">
                       <option value="circle">环形布局</option>
                       <option value="grid">网格布局</option>
                       <option value="radial">放射布局</option>
@@ -344,12 +368,16 @@
                     隐藏未选中的边
                   </label>
                   <label class="graph-check">
+                    <input v-model="graphSettings.highlightAll" type="checkbox" />
+                    全部高亮 / 选中关联高亮
+                  </label>
+                  <label class="graph-check">
                     <input v-model="graphSettings.edgeEvents" type="checkbox" />
                     边事件
                   </label>
                   <label class="graph-check">
                     <input v-model="graphSettings.boxSelect" type="checkbox" />
-                    框选
+                    框选（按住 Shift 拖动）
                   </label>
                   <div class="graph-form-grid">
                     <label>
@@ -382,9 +410,9 @@
                 <div
                   ref="graphCanvasRef"
                   class="graph-visual-canvas"
-                  :class="{ selecting: graphSettings.boxSelect }"
+                  :class="{ selecting: boxSelection.active, panning: graphPan.active }"
                   @wheel.prevent="handleGraphWheel"
-                  @mousedown.self="startBoxSelect"
+                  @mousedown="startGraphCanvasPointer"
                   @mousemove="handleGraphMouseMove"
                   @mouseup="endGraphPointerAction"
                   @mouseleave="endGraphPointerAction"
@@ -400,6 +428,7 @@
                         :y2="getNodePosition(edge.target).y"
                         :class="['graph-edge-line', { active: isEdgeActive(edge), dimmed: isEdgeDimmed(edge) }]"
                         :stroke-width="getEdgeWidth(edge)"
+                        @mousedown.stop
                         @click.stop="selectEdge(edge)"
                       />
                       <text
@@ -408,6 +437,7 @@
                         class="graph-edge-label"
                         :x="getEdgeLabelPosition(edge).x"
                         :y="getEdgeLabelPosition(edge).y"
+                        @mousedown.stop
                         @click.stop="selectEdge(edge)"
                       >
                         {{ edge.type }}
@@ -441,11 +471,18 @@
                 </div>
               </section>
 
-              <aside v-if="graphSettings.showPropertyPanel" class="graph-property-panel">
-                <div class="panel-title">属性面板</div>
+              <aside
+                v-if="graphSettings.showPropertyPanel && !isGraphPropertyCollapsed"
+                class="graph-property-panel floating-panel"
+                :style="floatingPanelStyle(graphPropertyPanelPosition)"
+              >
+                <div class="floating-panel-header" @mousedown="startFloatingPanelDrag('property', $event)">
+                  <div class="panel-title">属性面板</div>
+                  <button type="button" @mousedown.stop @click.stop="isGraphPropertyCollapsed = true">收起</button>
+                </div>
                 <div v-if="selectedGraphItem" class="property-card">
                   <div class="property-title">
-                    <span>{{ selectedGraphItem.kind === 'node' ? '实体' : '关系' }}</span>
+                    <span>{{ getSelectedItemKindText(selectedGraphItem.kind) }}</span>
                     <strong>{{ selectedGraphItem.title }}</strong>
                   </div>
                   <div class="property-list">
@@ -462,24 +499,24 @@
                 <div v-else class="graph-empty small">
                   点击一个实体或关系，查看具体属性。
                 </div>
+              </aside>
 
-                <div v-if="graphHealth && graphSettings.healthCheck" class="relation-card">
-                  <h3>健康检查</h3>
-                  <p>{{ graphHealth.connected ? 'Neo4j 连接正常' : graphHealth.message }}</p>
+              <aside class="graph-overview-panel">
+                <div v-if="graphHealth && graphSettings.healthCheck" class="overview-item">
+                  <strong>健康检查</strong>
+                  <span>{{ graphHealth.connected ? 'Neo4j 连接正常' : graphHealth.message }}</span>
                 </div>
-
-                <div class="relation-card">
-                  <h3>实体类型</h3>
-                  <p v-for="item in topNodeLabels" :key="item.name">
+                <div class="overview-item">
+                  <strong>实体类型</strong>
+                  <span v-for="item in topNodeLabels" :key="item.name">
                     {{ item.name }}：{{ item.count }}
-                  </p>
+                  </span>
                 </div>
-
-                <div class="relation-card">
-                  <h3>关系类型</h3>
-                  <p v-for="item in topRelationshipTypes" :key="item.name">
+                <div class="overview-item">
+                  <strong>关系类型</strong>
+                  <span v-for="item in topRelationshipTypes" :key="item.name">
                     {{ item.name }}：{{ item.count }}
-                  </p>
+                  </span>
                 </div>
               </aside>
             </div>
@@ -530,7 +567,7 @@ const graphKeyword = ref('');
 const graphFilterKeyword = ref('');
 const graphDepth = ref(1);
 const graphLimit = ref(300);
-const graphLayout = ref('circle');
+const graphLayout = ref('grid');
 const graphNodeSize = ref(38);
 const graphEdgeWidth = ref(2);
 const graphEdgeMinWidth = ref(1);
@@ -550,6 +587,20 @@ const draggedNode = ref(null);
 const boxSelectedNodeIds = ref(new Set());
 const nodePositions = ref({});
 const graphCanvasRef = ref(null);
+const isGraphControlCollapsed = ref(false);
+const isGraphPropertyCollapsed = ref(false);
+const graphControlPanelPosition = ref({ x: 16, y: 16 });
+const graphPropertyPanelPosition = ref({ x: 0, y: 16, right: 16 });
+const floatingPanelDrag = ref(null);
+const graphPan = ref({
+  active: false,
+  x: 0,
+  y: 0,
+  startX: 0,
+  startY: 0,
+  originX: 0,
+  originY: 0,
+});
 const boxSelection = ref({
   active: false,
   startX: 0,
@@ -568,6 +619,7 @@ const graphSettings = ref({
   hideUnselectedEdges: false,
   edgeEvents: true,
   boxSelect: true,
+  highlightAll: true,
 });
 
 const colorPalette = [
@@ -734,7 +786,7 @@ const activeEdgeIds = computed(() => {
 const graphTransform = computed(() => {
   const rotation = graphRotation.value;
   const zoom = graphZoom.value;
-  return `translate(500 310) rotate(${rotation}) scale(${zoom}) translate(-500 -310)`;
+  return `translate(${graphPan.value.x} ${graphPan.value.y}) translate(500 310) rotate(${rotation}) scale(${zoom}) translate(-500 -310)`;
 });
 
 const boxSelectionStyle = computed(() => {
@@ -859,6 +911,7 @@ async function loadGraphData() {
     graphSearchResult.value = searchResponse.data;
     graphData.value = normalizeGraphData(visualizeResponse.data);
     graphFilterKeyword.value = '';
+    nodePositions.value = {};
     buildNodePositions();
 
     if (graphData.value.nodes.length === 0) {
@@ -884,16 +937,16 @@ function normalizeGraphData(data) {
   };
 }
 
-function buildNodePositions() {
+function buildNodePositions({ preserveExisting = false } = {}) {
   const nodes = graphData.value.nodes;
   const total = Math.max(nodes.length, 1);
-  const positions = { ...nodePositions.value };
+  const positions = preserveExisting ? { ...nodePositions.value } : {};
   const centerX = 500;
   const centerY = 310;
   const radius = Math.min(260, Math.max(110, 26 * Math.sqrt(total)));
 
   nodes.forEach((node, index) => {
-    if (positions[node.id]) {
+    if (preserveExisting && positions[node.id]) {
       return;
     }
 
@@ -929,6 +982,11 @@ function buildNodePositions() {
   });
 
   nodePositions.value = positions;
+}
+
+function rebuildNodePositions() {
+  nodePositions.value = {};
+  buildNodePositions();
 }
 
 function getNodePosition(nodeId) {
@@ -1042,7 +1100,7 @@ function isNodeRelated(node) {
 }
 
 function isNodeDimmed(node) {
-  return selectedGraphItem.value && !isNodeRelated(node);
+  return !graphSettings.value.highlightAll && selectedGraphItem.value && !isNodeRelated(node);
 }
 
 function isEdgeActive(edge) {
@@ -1050,7 +1108,7 @@ function isEdgeActive(edge) {
 }
 
 function isEdgeDimmed(edge) {
-  return Boolean(selectedGraphItem.value) && !isEdgeActive(edge);
+  return !graphSettings.value.highlightAll && Boolean(selectedGraphItem.value) && !isEdgeActive(edge);
 }
 
 function zoomGraph(ratio) {
@@ -1064,7 +1122,13 @@ function rotateGraph(deg) {
 function resetGraphView() {
   graphZoom.value = 1;
   graphRotation.value = 0;
-  buildNodePositions();
+  graphPan.value = {
+    ...graphPan.value,
+    active: false,
+    x: 0,
+    y: 0,
+  };
+  rebuildNodePositions();
 }
 
 function toggleGraphFullscreen() {
@@ -1073,6 +1137,28 @@ function toggleGraphFullscreen() {
 
 function handleGraphWheel(event) {
   zoomGraph(event.deltaY < 0 ? 1.08 : 0.92);
+}
+
+function startGraphCanvasPointer(event) {
+  if (event.button !== 0) {
+    return;
+  }
+  if (graphSettings.value.boxSelect && event.shiftKey) {
+    startBoxSelect(event);
+    return;
+  }
+  startGraphPan(event);
+}
+
+function startGraphPan(event) {
+  graphPan.value = {
+    ...graphPan.value,
+    active: true,
+    startX: event.clientX,
+    startY: event.clientY,
+    originX: graphPan.value.x,
+    originY: graphPan.value.y,
+  };
 }
 
 function startNodeDrag(node, event) {
@@ -1088,10 +1174,27 @@ function startNodeDrag(node, event) {
 }
 
 function handleGraphMouseMove(event) {
+  if (graphPan.value.active) {
+    const rect = graphCanvasRef.value?.getBoundingClientRect();
+    const width = Math.max(rect?.width || 1, 1);
+    const height = Math.max(rect?.height || 1, 1);
+    const dx = ((event.clientX - graphPan.value.startX) / width) * 1000;
+    const dy = ((event.clientY - graphPan.value.startY) / height) * 620;
+    graphPan.value = {
+      ...graphPan.value,
+      x: graphPan.value.originX + dx,
+      y: graphPan.value.originY + dy,
+    };
+    return;
+  }
+
   if (draggedNode.value) {
+    const rect = graphCanvasRef.value?.getBoundingClientRect();
+    const width = Math.max(rect?.width || 1, 1);
+    const height = Math.max(rect?.height || 1, 1);
     const scale = graphZoom.value || 1;
-    const dx = (event.clientX - draggedNode.value.startX) / scale;
-    const dy = (event.clientY - draggedNode.value.startY) / scale;
+    const dx = (((event.clientX - draggedNode.value.startX) / width) * 1000) / scale;
+    const dy = (((event.clientY - draggedNode.value.startY) / height) * 620) / scale;
     nodePositions.value = {
       ...nodePositions.value,
       [draggedNode.value.id]: {
@@ -1114,6 +1217,10 @@ function handleGraphMouseMove(event) {
 
 function endGraphPointerAction() {
   draggedNode.value = null;
+  graphPan.value = {
+    ...graphPan.value,
+    active: false,
+  };
   if (boxSelection.value.active) {
     finishBoxSelect();
   }
@@ -1207,6 +1314,78 @@ function formatPropertyValue(value) {
     return JSON.stringify(value);
   }
   return String(value);
+}
+
+function getSelectedItemKindText(kind) {
+  if (kind === 'node') {
+    return '实体';
+  }
+  if (kind === 'edge') {
+    return '关系';
+  }
+  if (kind === 'box') {
+    return '框选';
+  }
+  return '详情';
+}
+
+function floatingPanelStyle(position) {
+  const style = {
+    top: `${position.y}px`,
+  };
+  if (position.right !== undefined && position.x === 0) {
+    style.right = `${position.right}px`;
+  } else {
+    style.left = `${position.x}px`;
+  }
+  return style;
+}
+
+function startFloatingPanelDrag(panel, event) {
+  if (event.button !== 0) {
+    return;
+  }
+  const shellRect = event.currentTarget.closest('.graph-shell')?.getBoundingClientRect();
+  const panelRect = event.currentTarget.closest('.floating-panel')?.getBoundingClientRect();
+  if (!shellRect || !panelRect) {
+    return;
+  }
+
+  floatingPanelDrag.value = {
+    panel,
+    startX: event.clientX,
+    startY: event.clientY,
+    originX: panelRect.left - shellRect.left,
+    originY: panelRect.top - shellRect.top,
+    shellWidth: shellRect.width,
+    shellHeight: shellRect.height,
+    panelWidth: panelRect.width,
+    panelHeight: panelRect.height,
+  };
+  window.addEventListener('mousemove', handleFloatingPanelDrag);
+  window.addEventListener('mouseup', stopFloatingPanelDrag);
+}
+
+function handleFloatingPanelDrag(event) {
+  if (!floatingPanelDrag.value) {
+    return;
+  }
+  const drag = floatingPanelDrag.value;
+  const nextX = clampNumber(drag.originX + event.clientX - drag.startX, 8, drag.shellWidth - drag.panelWidth - 8, 8);
+  const nextY = clampNumber(drag.originY + event.clientY - drag.startY, 8, drag.shellHeight - drag.panelHeight - 8, 8);
+  const nextPosition = { x: nextX, y: nextY };
+
+  if (drag.panel === 'control') {
+    graphControlPanelPosition.value = nextPosition;
+  } else {
+    graphPropertyPanelPosition.value = nextPosition;
+  }
+}
+
+function stopFloatingPanelDrag() {
+  floatingPanelDrag.value = null;
+  window.removeEventListener('mousemove', handleFloatingPanelDrag);
+  window.removeEventListener('mouseup', stopFloatingPanelDrag);
 }
 
 function getStatusText(status) {
@@ -1567,6 +1746,7 @@ function sendMessage() {
 
 onBeforeUnmount(() => {
   closeEventSource();
+  stopFloatingPanelDrag();
   typingTimers.forEach((timer) => window.clearTimeout(timer));
   typingTimers.clear();
 });
