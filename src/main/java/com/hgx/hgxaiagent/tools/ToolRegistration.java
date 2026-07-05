@@ -1,5 +1,6 @@
 package com.hgx.hgxaiagent.tools;
 
+import com.hgx.hgxaiagent.knowledgegraph.service.KnowledgeGraphService;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbacks;
 import org.springframework.beans.factory.annotation.Value;
@@ -19,7 +20,9 @@ public class ToolRegistration {
     private String searchApiKey;
 
     @Bean
-    public ToolCallback[] allTools(@Qualifier("pgVectorVectorStore") VectorStore pgVectorVectorStore) {
+    public ToolCallback[] allTools(
+            @Qualifier("pgVectorVectorStore") VectorStore pgVectorVectorStore,
+            KnowledgeGraphService knowledgeGraphService) {
         FileOperationTool fileOperationTool = new FileOperationTool();
         WebSearchTool webSearchTool = new WebSearchTool(searchApiKey);
         WebScrapingTool webScrapingTool = new WebScrapingTool();
@@ -29,6 +32,8 @@ public class ToolRegistration {
         TerminateTool terminateTool = new TerminateTool();
         //使用本地向量数据库
         LocalRagTool localRagTool = new LocalRagTool(pgVectorVectorStore);
+        //使用neo4j知识图谱
+        KnowledgeGraphTool knowledgeGraphTool = new KnowledgeGraphTool(knowledgeGraphService);
 
         return ToolCallbacks.from(
                 fileOperationTool,
@@ -38,7 +43,8 @@ public class ToolRegistration {
                 terminalOperationTool,
                 pdfGenerationTool,
                 terminateTool,
-                localRagTool
+                localRagTool,
+                knowledgeGraphTool
         );
     }
 }

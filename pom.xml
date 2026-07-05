@@ -36,6 +36,12 @@
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
 
+        <!-- Neo4j 知识图谱 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-neo4j</artifactId>
+        </dependency>
+
         <!--        &lt;!&ndash; LangChain4j方式引入大模型 &ndash;&gt;-->
         <!--        <dependency>-->
         <!--            <groupId>dev.langchain4j</groupId>-->

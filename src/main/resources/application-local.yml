@@ -25,6 +25,11 @@ spring:
       url:  jdbc:postgresql://localhost:5432/hgx_ai_agent
       username: postgres
       password: 123456
+  neo4j:
+    uri: bolt://localhost:7687
+    authentication:
+      username: neo4j
+      password: 12345678
 # searchAPI
 search-api:
   api-key: HgMx1pBK3JCwA4SsEe9GUafS
