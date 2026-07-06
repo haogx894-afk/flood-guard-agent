@@ -199,6 +199,8 @@ public class KnowledgeGraphService {
     private GraphData queryDefaultGraph(Session session, int limit) {
         Result result = session.run("""
                 MATCH p=(a)-[r]->(b)
+                WITH p, rand() AS randomOrder
+                ORDER BY randomOrder
                 RETURN p
                 LIMIT %d
                 """.formatted(limit));

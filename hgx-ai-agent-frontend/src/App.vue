@@ -223,14 +223,16 @@
             </div>
 
             <div class="graph-top-grid">
-              <div
+              <button
                 v-for="item in graphStats"
-                :key="item.label"
-                class="stat-card"
+                :key="item.key"
+                type="button"
+                class="stat-card stat-card-button"
+                @click="openGraphStatDetail(item.key)"
               >
                 <span>{{ item.value }}</span>
                 <p>{{ item.label }}</p>
-              </div>
+              </button>
             </div>
 
             <div class="graph-shell">
@@ -250,6 +252,34 @@
               >
                 属性面板
               </button>
+              <button
+                v-if="isGraphLegendCollapsed"
+                type="button"
+                class="floating-tab legend-tab"
+                @click="isGraphLegendCollapsed = false"
+              >
+                图例
+              </button>
+
+              <aside v-if="graphStatDetail.visible" class="graph-stat-detail-panel">
+                <div class="floating-panel-header compact">
+                  <div>
+                    <div class="panel-title">{{ graphStatDetail.title }}</div>
+                    <p>{{ graphStatDetail.summary }}</p>
+                  </div>
+                  <button type="button" @click="closeGraphStatDetail">关闭</button>
+                </div>
+                <div class="stat-detail-list">
+                  <div
+                    v-for="item in graphStatDetailItems"
+                    :key="item.name"
+                    class="stat-detail-row"
+                  >
+                    <span>{{ item.name }}</span>
+                    <b>{{ formatNumber(item.count) }}</b>
+                  </div>
+                </div>
+              </aside>
 
               <aside
                 v-if="!isGraphControlCollapsed"
@@ -305,7 +335,7 @@
                   <div class="graph-form-grid">
                     <label>
                       节点大小
-                      <input v-model.number="graphNodeSize" type="range" min="22" max="86" />
+                      <input v-model.number="graphNodeSize" type="range" min="22" max="86" @input="rebuildNodePositions" />
                     </label>
                     <label>
                       边粗细
@@ -471,6 +501,23 @@
                 </div>
               </section>
 
+              <aside v-if="!isGraphLegendCollapsed" class="graph-legend-panel">
+                <div class="legend-header">
+                  <strong>图例</strong>
+                  <button type="button" @click="isGraphLegendCollapsed = true">隐藏</button>
+                </div>
+                <div class="legend-list">
+                  <div
+                    v-for="item in graphLegendItems"
+                    :key="item.type"
+                    class="legend-item"
+                  >
+                    <i :style="{ background: item.color }"></i>
+                    <span>{{ item.type }}</span>
+                  </div>
+                </div>
+              </aside>
+
               <aside
                 v-if="graphSettings.showPropertyPanel && !isGraphPropertyCollapsed"
                 class="graph-property-panel floating-panel"
@@ -501,24 +548,6 @@
                 </div>
               </aside>
 
-              <aside class="graph-overview-panel">
-                <div v-if="graphHealth && graphSettings.healthCheck" class="overview-item">
-                  <strong>健康检查</strong>
-                  <span>{{ graphHealth.connected ? 'Neo4j 连接正常' : graphHealth.message }}</span>
-                </div>
-                <div class="overview-item">
-                  <strong>实体类型</strong>
-                  <span v-for="item in topNodeLabels" :key="item.name">
-                    {{ item.name }}：{{ item.count }}
-                  </span>
-                </div>
-                <div class="overview-item">
-                  <strong>关系类型</strong>
-                  <span v-for="item in topRelationshipTypes" :key="item.name">
-                    {{ item.name }}：{{ item.count }}
-                  </span>
-                </div>
-              </aside>
             </div>
           </section>
         </section>
@@ -566,9 +595,9 @@ const graphData = ref({ nodes: [], edges: [] });
 const graphKeyword = ref('');
 const graphFilterKeyword = ref('');
 const graphDepth = ref(1);
-const graphLimit = ref(300);
+const graphLimit = ref(20);
 const graphLayout = ref('grid');
-const graphNodeSize = ref(38);
+const graphNodeSize = ref(24);
 const graphEdgeWidth = ref(2);
 const graphEdgeMinWidth = ref(1);
 const graphEdgeMaxWidth = ref(6);
@@ -589,6 +618,13 @@ const nodePositions = ref({});
 const graphCanvasRef = ref(null);
 const isGraphControlCollapsed = ref(false);
 const isGraphPropertyCollapsed = ref(false);
+const isGraphLegendCollapsed = ref(false);
+const graphStatDetail = ref({
+  visible: false,
+  key: '',
+  title: '',
+  summary: '',
+});
 const graphControlPanelPosition = ref({ x: 16, y: 16 });
 const graphPropertyPanelPosition = ref({ x: 0, y: 16, right: 16 });
 const floatingPanelDrag = ref(null);
@@ -646,10 +682,10 @@ const colorPalette = [
 ];
 
 const graphStats = computed(() => [
-  { label: '实体总数', value: formatNumber(graphStatsData.value?.totalNodes) },
-  { label: '关系总数', value: formatNumber(graphStatsData.value?.totalRelationships) },
-  { label: '搜索实体', value: formatNumber(graphSearchResult.value?.nodeCount) },
-  { label: '搜索关系', value: formatNumber(graphSearchResult.value?.relationshipCount) },
+  { key: 'allNodes', label: '实体总数', value: formatNumber(graphStatsData.value?.totalNodes) },
+  { key: 'allRelationships', label: '关系总数', value: formatNumber(graphStatsData.value?.totalRelationships) },
+  { key: 'searchNodes', label: '搜索实体', value: formatNumber(graphSearchResult.value?.nodeCount) },
+  { key: 'searchRelationships', label: '搜索关系', value: formatNumber(graphSearchResult.value?.relationshipCount) },
 ]);
 
 const isKnowledgeBusy = computed(
@@ -726,6 +762,14 @@ const visibleGraphEdges = computed(() => {
 
 const edgeLabels = computed(() => (graphSettings.value.showEdgeLabels ? visibleGraphEdges.value : []));
 
+const graphLegendItems = computed(() => {
+  const types = [...new Set(visibleGraphNodes.value.map((node) => node.type || 'Entity'))];
+  return types.map((type) => ({
+    type,
+    color: customTypeColors.value[type] || getTypeColor(type),
+  }));
+});
+
 const selectedProperties = computed(() => {
   if (!selectedGraphItem.value) {
     return [];
@@ -736,8 +780,7 @@ const selectedProperties = computed(() => {
   }));
 });
 
-const topNodeLabels = computed(() => graphStatsData.value?.nodeLabels?.slice(0, 8) || []);
-const topRelationshipTypes = computed(() => graphStatsData.value?.relationshipTypes?.slice(0, 8) || []);
+const graphStatDetailItems = computed(() => getGraphStatItems(graphStatDetail.value.key));
 
 const selectedNodeIds = computed(() => {
   if (!selectedGraphItem.value) {
@@ -835,6 +878,11 @@ const canSend = computed(() => inputValue.value.length > 0 && !isStreaming.value
 
 async function switchView(view) {
   activeView.value = view;
+  if (view === 'chat') {
+    shouldAutoScroll.value = true;
+    scrollToBottom({ behavior: 'auto', force: true });
+    return;
+  }
   if (view === 'knowledge') {
     await fetchDocuments();
     if (knowledgeTab.value === 'graph') {
@@ -899,17 +947,25 @@ async function loadGraphData() {
 
   try {
     const safeDepth = clampNumber(graphDepth.value, 1, 5, 1);
-    const safeLimit = clampNumber(graphLimit.value, 1, 1000, 300);
+    const safeLimit = clampNumber(graphLimit.value, 1, 1000, 20);
     graphDepth.value = safeDepth;
     graphLimit.value = safeLimit;
 
-    const [searchResponse, visualizeResponse] = await Promise.all([
-      searchKnowledgeGraph(graphKeyword.value, safeLimit),
-      visualizeKnowledgeGraph(graphKeyword.value, safeDepth, safeLimit),
-    ]);
-
-    graphSearchResult.value = searchResponse.data;
+    const keyword = graphKeyword.value;
+    const visualizeResponse = await visualizeKnowledgeGraph(keyword, safeDepth, safeLimit);
     graphData.value = normalizeGraphData(visualizeResponse.data);
+    if (keyword) {
+      const searchResponse = await searchKnowledgeGraph(keyword, safeLimit);
+      graphSearchResult.value = searchResponse.data;
+    } else {
+      graphSearchResult.value = {
+        keyword: '',
+        nodeCount: graphData.value.nodes.length,
+        relationshipCount: graphData.value.edges.length,
+        nodes: graphData.value.nodes,
+        edges: graphData.value.edges,
+      };
+    }
     graphFilterKeyword.value = '';
     nodePositions.value = {};
     buildNodePositions();
@@ -930,6 +986,67 @@ function handleHealthCheckToggle() {
   }
 }
 
+function openGraphStatDetail(key) {
+  const titleMap = {
+    allNodes: '实体类型统计',
+    allRelationships: '关系类型统计',
+    searchNodes: '当前搜索实体统计',
+    searchRelationships: '当前搜索关系统计',
+  };
+  const items = getGraphStatItems(key);
+  graphStatDetail.value = {
+    visible: true,
+    key,
+    title: titleMap[key] || '图谱统计',
+    summary: `共 ${items.length} 种类型`,
+  };
+}
+
+function closeGraphStatDetail() {
+  graphStatDetail.value = {
+    visible: false,
+    key: '',
+    title: '',
+    summary: '',
+  };
+}
+
+function getGraphStatItems(key) {
+  if (key === 'allNodes') {
+    return normalizeCountItems(graphStatsData.value?.nodeLabels);
+  }
+  if (key === 'allRelationships') {
+    return normalizeCountItems(graphStatsData.value?.relationshipTypes);
+  }
+  if (key === 'searchNodes') {
+    return countGraphItems(graphSearchResult.value?.nodes || graphData.value.nodes, (node) => node.type || 'Entity');
+  }
+  if (key === 'searchRelationships') {
+    return countGraphItems(graphSearchResult.value?.edges || graphData.value.edges, (edge) => edge.type || '关系');
+  }
+  return [];
+}
+
+function normalizeCountItems(items = []) {
+  return items
+    .map((item) => ({
+      name: item.name || '未命名',
+      count: Number(item.count || 0),
+    }))
+    .sort((a, b) => b.count - a.count);
+}
+
+function countGraphItems(items = [], getName) {
+  const countMap = new Map();
+  items.forEach((item) => {
+    const name = getName(item) || '未命名';
+    countMap.set(name, (countMap.get(name) || 0) + 1);
+  });
+  return [...countMap.entries()]
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
 function normalizeGraphData(data) {
   return {
     nodes: Array.isArray(data?.nodes) ? data.nodes : [],
@@ -943,7 +1060,7 @@ function buildNodePositions({ preserveExisting = false } = {}) {
   const positions = preserveExisting ? { ...nodePositions.value } : {};
   const centerX = 500;
   const centerY = 310;
-  const radius = Math.min(260, Math.max(110, 26 * Math.sqrt(total)));
+  const radius = Math.min(285, Math.max(130, 34 * Math.sqrt(total)));
 
   nodes.forEach((node, index) => {
     if (preserveExisting && positions[node.id]) {
@@ -951,22 +1068,23 @@ function buildNodePositions({ preserveExisting = false } = {}) {
     }
 
     if (graphLayout.value === 'grid') {
-      const columns = Math.ceil(Math.sqrt(total));
-      const spacingX = Math.min(150, 820 / Math.max(columns, 1));
-      const spacingY = 92;
+      const columns = Math.max(1, Math.ceil(Math.sqrt(total * 1.55)));
+      const rows = Math.max(1, Math.ceil(total / columns));
+      const spacingX = total <= 100 ? 840 / Math.max(columns - 1, 1) : 90;
+      const spacingY = total <= 100 ? 480 / Math.max(rows - 1, 1) : 72;
       const row = Math.floor(index / columns);
       const col = index % columns;
       positions[node.id] = {
-        x: 120 + col * spacingX,
-        y: 90 + row * spacingY,
+        x: columns === 1 ? centerX : 80 + col * spacingX,
+        y: rows === 1 ? centerY : 70 + row * spacingY,
       };
       return;
     }
 
     if (graphLayout.value === 'radial') {
       const typeIndex = getTypeIndex(node.type);
-      const layerRadius = 90 + (typeIndex % 4) * 70;
-      const angle = (index / total) * Math.PI * 2 + typeIndex * 0.34;
+      const layerRadius = 110 + (typeIndex % 4) * 86;
+      const angle = (index / total) * Math.PI * 2 + typeIndex * 0.42;
       positions[node.id] = {
         x: centerX + Math.cos(angle) * layerRadius,
         y: centerY + Math.sin(angle) * layerRadius,
@@ -981,7 +1099,52 @@ function buildNodePositions({ preserveExisting = false } = {}) {
     };
   });
 
+  if (nodes.length <= 100) {
+    spreadOverlappingNodes(positions, nodes);
+  }
+
   nodePositions.value = positions;
+}
+
+function spreadOverlappingNodes(positions, nodes) {
+  const minDistance = Math.max(graphNodeSize.value * 3.1, 70);
+  for (let iteration = 0; iteration < 70; iteration++) {
+    let moved = false;
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const first = positions[nodes[i].id];
+        const second = positions[nodes[j].id];
+        if (!first || !second) {
+          continue;
+        }
+
+        let dx = second.x - first.x;
+        let dy = second.y - first.y;
+        let distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance === 0) {
+          const angle = (i + j + 1) * 0.73;
+          dx = Math.cos(angle);
+          dy = Math.sin(angle);
+          distance = 1;
+        }
+        if (distance >= minDistance) {
+          continue;
+        }
+
+        const offset = (minDistance - distance) / 2;
+        const ux = dx / distance;
+        const uy = dy / distance;
+        first.x = clampNumber(first.x - ux * offset, 42, 958, first.x);
+        first.y = clampNumber(first.y - uy * offset, 42, 578, first.y);
+        second.x = clampNumber(second.x + ux * offset, 42, 958, second.x);
+        second.y = clampNumber(second.y + uy * offset, 42, 578, second.y);
+        moved = true;
+      }
+    }
+    if (!moved) {
+      break;
+    }
+  }
 }
 
 function rebuildNodePositions() {
@@ -1003,8 +1166,7 @@ function getEdgeLabelPosition(edge) {
 }
 
 function getNodeRadius(node) {
-  const labelLength = String(node.label || '').length;
-  return Math.min(graphNodeSize.value + labelLength * 1.6, 92);
+  return Math.min(Math.max(graphNodeSize.value, 16), 64);
 }
 
 function getEdgeWidth(edge) {
@@ -1017,7 +1179,15 @@ function getNodeColor(node) {
   if (customTypeColors.value[node.type]) {
     return customTypeColors.value[node.type];
   }
-  return colorPalette[getTypeIndex(node.type) % colorPalette.length];
+  return getTypeColor(node.type);
+}
+
+function getTypeColor(type) {
+  const index = getTypeIndex(type);
+  if (colorPalette[index]) {
+    return colorPalette[index];
+  }
+  return `hsl(${(index * 47) % 360} 72% 44%)`;
 }
 
 function getTypeIndex(type) {
