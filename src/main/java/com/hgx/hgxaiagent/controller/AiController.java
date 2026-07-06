@@ -2,8 +2,11 @@ package com.hgx.hgxaiagent.controller;
 
 import com.hgx.hgxaiagent.agent.HaoManus;
 import com.hgx.hgxaiagent.app.LoveApp;
+import com.hgx.hgxaiagent.knowledgegraph.service.GraphQuestionRouterService;
 import jakarta.annotation.Resource;
+import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.http.MediaType;
@@ -19,7 +22,9 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 @RestController
@@ -34,6 +39,9 @@ public class AiController {
 
     @Resource
     private ChatModel dashscopeChatModel;
+
+    @Resource
+    private GraphQuestionRouterService graphQuestionRouterService;
 
     /**
      * Manus 多轮对话记忆。
@@ -93,11 +101,40 @@ public class AiController {
     public SseEmitter doChatWithManus(String message, String chatId) {
         String conversationId = StringUtils.hasText(chatId) ? chatId : UUID.randomUUID().toString();
 
+        try {
+            Optional<String> directGraphAnswer = graphQuestionRouterService.route(message);
+            if (directGraphAnswer.isPresent()) {
+                return sendDirectManusAnswer(conversationId, message, directGraphAnswer.get());
+            }
+        } catch (Exception e) {
+            return sendDirectManusAnswer(conversationId, message, "知识图谱预查询失败：" + e.getMessage());
+        }
+
         HaoManus haoManus = new HaoManus(allTools, dashscopeChatModel);
         List<Message> history = manusMemoryMap.getOrDefault(conversationId, new ArrayList<>());
         haoManus.setMessageList(new ArrayList<>(history));
         haoManus.setMemorySaver(messages -> manusMemoryMap.put(conversationId, new ArrayList<>(messages)));
 
         return haoManus.runStream(message);
+    }
+
+    private SseEmitter sendDirectManusAnswer(String conversationId, String userMessage, String answer) {
+        SseEmitter sseEmitter = new SseEmitter(300000L);
+
+        CompletableFuture.runAsync(() -> {
+            try {
+                List<Message> history = new ArrayList<>(manusMemoryMap.getOrDefault(conversationId, new ArrayList<>()));
+                history.add(new UserMessage(userMessage));
+                history.add(new AssistantMessage(answer));
+                manusMemoryMap.put(conversationId, history);
+
+                sseEmitter.send(answer);
+                sseEmitter.complete();
+            } catch (IOException e) {
+                sseEmitter.completeWithError(e);
+            }
+        });
+
+        return sseEmitter;
     }
 }
