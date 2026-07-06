@@ -370,11 +370,12 @@ public class KnowledgeGraphService {
     private GraphNode buildGraphNode(String elementId, List<String> labels, Map<String, Object> properties) {
         String id = firstNonBlank(properties.get("vid"), elementId);
         String label = firstNonBlank(
+                properties.get("vid"),
                 properties.get("name"),
                 properties.get("名称"),
                 properties.get("label"),
                 properties.get("标题"),
-                id
+                elementId
         );
         String type = labels.stream()
                 .filter(labelName -> !"Entity".equals(labelName))

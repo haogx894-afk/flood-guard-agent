@@ -490,7 +490,7 @@
                           text-anchor="middle"
                           :y="getNodeRadius(node) + 17"
                         >
-                          {{ getShortLabel(node.label) }}
+                          {{ getShortLabel(getNodeDisplayName(node)) }}
                         </text>
                       </g>
                     </g>
@@ -1169,6 +1169,10 @@ function getNodeRadius(node) {
   return Math.min(Math.max(graphNodeSize.value, 16), 64);
 }
 
+function getNodeDisplayName(node) {
+  return node?.id || node?.properties?.vid || node?.label || '-';
+}
+
 function getEdgeWidth(edge) {
   const rank = Number(edge.properties?.rank || 1);
   const base = Number.isFinite(rank) ? Math.min(Math.max(rank, graphEdgeMinWidth.value), graphEdgeMaxWidth.value) : graphEdgeWidth.value;
@@ -1210,7 +1214,7 @@ async function selectNode(node) {
   selectedGraphItem.value = {
     kind: 'node',
     id: node.id,
-    title: node.label,
+    title: getNodeDisplayName(node),
     type: node.type,
     properties: node.properties,
   };
@@ -1221,7 +1225,7 @@ async function selectNode(node) {
     selectedGraphItem.value = {
       kind: 'node',
       id: data.id,
-      title: data.label,
+      title: getNodeDisplayName(data),
       type: data.type,
       properties: data.properties || {},
     };

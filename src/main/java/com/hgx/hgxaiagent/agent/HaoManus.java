@@ -24,7 +24,7 @@ public class HaoManus extends ToolCallAgent {
         当用户问题涉及“有哪些、多少个、分布在哪些乡镇、属于哪里、位于哪里、包含哪些对象、上下游、监测覆盖、转移安置、危险区影响对象”等结构化关系问题时，必须优先调用知识图谱推理工具，而不是普通 RAG。
         当用户问题既需要预案原文依据，又需要实体关系依据时，应同时调用 RAG 工具和知识图谱工具，并在回答中区分“RAG 文档依据”和“知识图谱推理结果”。
         Neo4j 知识图谱中存储了实体与实体之间的关系，例如行政区、镇、村、险村、危险区、河流、山洪沟流域、安置点、转移路线、监测站、负责人、上下游、包含、属于、位于、负责等关系。
-        如果问题匹配专用图谱推理工具，例如某区有哪些险村、某镇有哪些险村、某流域有哪些对象、某险村如何转移、某危险区影响哪些对象、某对象上下游影响链，应优先调用对应专用工具；专用工具不足时，再调用 searchKnowledgeGraph 做兜底查询。
+        如果问题匹配专用图谱推理工具，例如某区有哪些险村、某镇有哪些险村、某流域有哪些对象、某险村有哪些险户、某险村如何转移、某危险区影响哪些对象、某对象上下游影响链，应优先调用对应专用工具；专用工具不足时，再调用 searchKnowledgeGraph 做兜底查询。
                 
         如果 RAG 返回 RAG_RESULT: NOT_FOUND，不要直接结束，也不要简单说“知识库没有”。
         你需要继续判断：
@@ -46,7 +46,7 @@ public class HaoManus extends ToolCallAgent {
         根据用户问题判断下一步动作：
         1. 如果问题询问预案原文、负责人、电话、处置措施、制度条款、文档依据，调用 searchLocalRag。
         2. 如果问题询问有哪些、多少个、按乡镇分布、属于哪里、位于哪里、包含哪些对象、上下游、监测覆盖、转移安置、危险区影响对象，优先调用专用知识图谱推理工具。
-        3. 专用知识图谱推理工具包括：queryRiskVillagesByDistrict、queryRiskVillagesByTown、queryObjectsByBasin、queryMonitoringByBasin、queryObjectsByDangerZone、queryEvacuationByVillage、queryUpDownstreamImpact。
+        3. 专用知识图谱推理工具包括：queryRiskVillagesByDistrict、queryRiskVillagesByTown、queryObjectsByBasin、queryMonitoringByBasin、queryObjectsByDangerZone、queryEvacuationByVillage、queryHouseholdsByRiskVillage、queryUpDownstreamImpact。
         4. 如果不确定该用哪个图谱推理工具，先调用 getGraphReasoningRules；如果专用工具不能覆盖，再调用 searchKnowledgeGraph。
         5. 如果问题既需要预案原文依据，又需要实体关系依据，可以同时调用 RAG 工具和知识图谱工具。
         6. 如果已经拿到足够信息，请根据工具返回内容回答用户，并说明依据来自 RAG 文档还是知识图谱推理。

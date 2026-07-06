@@ -90,6 +90,16 @@ public class KnowledgeGraphTool {
     }
 
     @Tool(description = """
+            查询某个险村包含的险户清单。
+            当用户问“某险村有哪些险户”“某村有多少险户”“下辛庄村（永定河）有哪些险户”等问题时，必须优先调用本工具。
+            本工具会推理隐藏路径：险村 -> 包含 -> 险户，并优先使用实体的 vid 字段作为返回名称。
+            """)
+    public String queryHouseholdsByRiskVillage(
+            @ToolParam(description = "险村名称或关键词，例如 下辛庄村（永定河）、张家坟村") String villageName) {
+        return graphReasoningService.queryHouseholdsByRiskVillage(villageName);
+    }
+
+    @Tool(description = """
             查询河段或险村的上游/下游影响链。
             当用户问“某河段上游/下游是什么”“某险村上游有哪些村”“某对象可能影响下游哪些对象”等问题时，调用本工具。
             """)

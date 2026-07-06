@@ -16,6 +16,8 @@ public class GraphQuestionRouterService {
 
     private static final Pattern DISTRICT_PATTERN = Pattern.compile("([\\u4e00-\\u9fa5A-Za-z0-9（）()]+?区)");
     private static final Pattern TOWN_PATTERN = Pattern.compile("([\\u4e00-\\u9fa5A-Za-z0-9（）()]+?(?:满族乡|镇|乡))");
+    private static final Pattern VILLAGE_WITH_BASIN_PATTERN = Pattern.compile("([\\u4e00-\\u9fa5A-Za-z0-9]+(?:村|社区)[（(][\\u4e00-\\u9fa5A-Za-z0-9]+[）)])");
+    private static final Pattern VILLAGE_PATTERN = Pattern.compile("([\\u4e00-\\u9fa5A-Za-z0-9]+?(?:村|社区))");
 
     private final GraphReasoningService graphReasoningService;
 
@@ -29,12 +31,36 @@ public class GraphQuestionRouterService {
             return Optional.empty();
         }
 
+        Optional<String> householdAnswer = routeHouseholdQuestion(question);
+        if (householdAnswer.isPresent()) {
+            return householdAnswer;
+        }
+
         Optional<String> riskVillageAnswer = routeRiskVillageQuestion(question);
         if (riskVillageAnswer.isPresent()) {
             return riskVillageAnswer;
         }
 
         return Optional.empty();
+    }
+
+    private Optional<String> routeHouseholdQuestion(String question) {
+        if (!question.contains("险户")) {
+            return Optional.empty();
+        }
+        if (!containsAny(question, "哪些", "多少", "几个", "列表", "名单", "清单", "信息", "情况")) {
+            return Optional.empty();
+        }
+
+        Optional<String> villageName = extractVillageName(question);
+        if (villageName.isEmpty()) {
+            return Optional.empty();
+        }
+
+        return Optional.of(formatDirectGraphAnswer(
+                "险村险户清单查询",
+                graphReasoningService.queryHouseholdsByRiskVillage(villageName.get())
+        ));
     }
 
     private Optional<String> routeRiskVillageQuestion(String question) {
@@ -62,6 +88,34 @@ public class GraphQuestionRouterService {
         }
 
         return Optional.empty();
+    }
+
+    private Optional<String> extractVillageName(String question) {
+        String text = question
+                .replaceFirst("^(请问|帮我查一下|帮我查|查询一下|查询|查一下|查|我想知道|我想查|看看)", "")
+                .trim();
+
+        String[] markers = {
+                "有哪些险户", "有多少险户", "几个险户", "险户有哪些", "险户有多少",
+                "的险户", "险户"
+        };
+        for (String marker : markers) {
+            int index = text.indexOf(marker);
+            if (index > 0) {
+                String candidate = text.substring(0, index)
+                        .replace("的", "")
+                        .trim();
+                if (StringUtils.hasText(candidate)) {
+                    return Optional.of(candidate);
+                }
+            }
+        }
+
+        Optional<String> villageWithBasin = extract(text, VILLAGE_WITH_BASIN_PATTERN);
+        if (villageWithBasin.isPresent()) {
+            return villageWithBasin;
+        }
+        return extract(text, VILLAGE_PATTERN);
     }
 
     private String formatDirectGraphAnswer(String taskType, String graphResult) {
