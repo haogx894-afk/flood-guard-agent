@@ -138,69 +138,128 @@
 
       <div class="workspace">
         <section v-if="activeView === 'chat'" class="chat-card fluent-card">
-          <div class="chat-card-header">
-            <div>
-<!--              <p class="section-kicker">AI 防汛管家</p>-->
-              <h2>山洪防御空间辅助决策会话</h2>
+          <aside class="conversation-sidebar" aria-label="历史对话">
+            <div class="conversation-sidebar-header">
+              <div>
+                <p class="section-kicker">Conversation History</p>
+                <h2>历史记录</h2>
+              </div>
+              <button
+                type="button"
+                class="new-conversation-button"
+                :disabled="isStreaming || isLoadingConversations"
+                @click="createNewConversation"
+              >
+                新建
+              </button>
             </div>
-            <div class="chat-meta">
-              <span>{{ messages.length }} 条消息记录</span>
-              <span>{{ isStreaming ? '生成中' : '待命' }}</span>
-            </div>
-          </div>
 
-          <section
-            ref="messagePanelRef"
+            <div v-if="conversationError" class="conversation-notice error">
+              {{ conversationError }}
+            </div>
+
+            <div class="conversation-list">
+              <div v-if="isLoadingConversations" class="conversation-empty">
+                正在加载历史记录...
+              </div>
+              <div v-else-if="conversationRows.length === 0" class="conversation-empty">
+                暂无历史对话，点击新建后开始提问。
+              </div>
+              <template v-else>
+                <button
+                  v-for="item in conversationRows"
+                  :key="item.id"
+                  type="button"
+                  class="conversation-item"
+                  :class="{ active: item.id === currentConversationId }"
+                  @click="selectConversation(item.id)"
+                >
+                  <span class="conversation-title">{{ item.title }}</span>
+                  <span class="conversation-preview">{{ item.lastMessage || '还没有消息' }}</span>
+                  <span class="conversation-footer">
+                    <em>{{ item.messageCount }} 条消息</em>
+                    <time>{{ item.updatedAt }}</time>
+                  </span>
+                  <span
+                    class="conversation-delete"
+                    title="删除对话"
+                    @click.stop="deleteConversationItem(item)"
+                  >
+                    删除
+                  </span>
+                </button>
+              </template>
+            </div>
+          </aside>
+
+          <section class="chat-main-pane">
+            <div class="chat-card-header">
+              <div>
+                <p class="section-kicker">AI 防汛管家</p>
+                <h2>{{ currentConversationTitle }}</h2>
+              </div>
+              <div class="chat-meta">
+                <span>{{ messages.length }} 条消息记录</span>
+                <span>{{ isStreaming ? '生成中' : '待命' }}</span>
+              </div>
+            </div>
+
+            <section
+              ref="messagePanelRef"
             class="message-panel"
             aria-label="聊天记录"
             @scroll.passive="handlePanelScroll"
           >
+            <div v-if="isLoadingConversationMessages" class="chat-loading-row">
+              正在打开历史对话...
+            </div>
             <ChatMessage
               v-for="message in messages"
               :key="message.id"
-              :message="message"
-            />
-          </section>
+                :message="message"
+              />
+            </section>
 
-          <form class="composer" @submit.prevent="sendMessage">
-            <textarea
-              v-model.trim="inputValue"
-              :disabled="isStreaming"
-              rows="3"
-              placeholder="Enter 发送，Shift + Enter 换行"
-              @keydown.enter.exact.prevent="sendMessage"
-            />
-            <div class="composer-footer">
-              <div class="composer-tools" aria-label="输入模式">
-                <button type="button" class="tool-chip">
-                  深度思考
+            <form class="composer" @submit.prevent="sendMessage">
+              <textarea
+                v-model.trim="inputValue"
+                :disabled="isStreaming"
+                rows="3"
+                placeholder="Enter 发送，Shift + Enter 换行"
+                @keydown.enter.exact.prevent="sendMessage"
+              />
+              <div class="composer-footer">
+                <div class="composer-tools" aria-label="输入模式">
+                  <button type="button" class="tool-chip">
+                    深度思考
+                  </button>
+                  <button type="button" class="tool-chip">
+                    智能搜索
+                  </button>
+                </div>
+                <button
+                  v-if="isStreaming"
+                  type="button"
+                  class="send-or-stop stop-button"
+                  aria-label="停止生成"
+                  title="停止生成"
+                  @click="stopGeneration"
+                >
+                  ■
                 </button>
-                <button type="button" class="tool-chip">
-                  智能搜索
+                <button
+                  v-else
+                  type="submit"
+                  class="send-or-stop send-button"
+                  :disabled="!canSend"
+                  aria-label="发送"
+                  title="发送"
+                >
+                  ➤
                 </button>
               </div>
-              <button
-                v-if="isStreaming"
-                type="button"
-                class="send-or-stop stop-button"
-                aria-label="停止生成"
-                title="停止生成"
-                @click="stopGeneration"
-              >
-                ■
-              </button>
-              <button
-                v-else
-                type="submit"
-                class="send-or-stop send-button"
-                :disabled="!canSend"
-                aria-label="发送"
-                title="发送"
-              >
-                ➤
-              </button>
-            </div>
-          </form>
+            </form>
+          </section>
         </section>
 
         <section v-else-if="activeView === 'knowledge'" class="knowledge-card fluent-card">
@@ -306,7 +365,13 @@
                     <button type="button" :disabled="isKnowledgeBusy" @click="rebuildDocument(doc.id)">
                       重建
                     </button>
-                    <button type="button" class="danger" :disabled="isKnowledgeBusy" @click="deleteDocument(doc.id)">
+                    <button
+                      v-if="canManageUsers"
+                      type="button"
+                      class="danger"
+                      :disabled="isKnowledgeBusy"
+                      @click="deleteDocument(doc.id)"
+                    >
                       删除
                     </button>
                   </span>
@@ -755,9 +820,13 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import ChatMessage from './components/ChatMessage.vue';
 import {
   buildManusSseUrl,
+  createChatConversation,
+  deleteChatConversation,
   deleteUser,
   deleteKnowledgeDocument,
   getCurrentUser,
+  getChatConversations,
+  getChatMessages,
   getKnowledgeGraphHealth,
   getKnowledgeGraphNode,
   getKnowledgeGraphRelationship,
@@ -773,7 +842,6 @@ import {
   visualizeKnowledgeGraph,
 } from './services/api';
 
-const CHAT_ID_STORAGE_KEY = 'hgx-ai-agent-chat-id';
 const CONNECTING_MESSAGE = '正在连接防汛智能体...';
 const AUTO_SCROLL_THRESHOLD = 20;
 const openingMessage = '您好！我是您的专属防汛管家。在制定方案前，我需要先了解您的问题。请输入您的问题？';
@@ -796,6 +864,12 @@ const isLoadingUsers = ref(false);
 const deletingUserId = ref('');
 const userError = ref('');
 const userNotice = ref('');
+
+const conversations = ref([]);
+const currentConversationId = ref('');
+const isLoadingConversations = ref(false);
+const isLoadingConversationMessages = ref(false);
+const conversationError = ref('');
 
 const activeView = ref('chat');
 const knowledgeTab = ref('documents');
@@ -938,6 +1012,22 @@ const userStats = computed(() => {
     { label: '普通用户', value: Math.max(users.value.length - adminCount, 0) },
   ];
 });
+
+const conversationRows = computed(() =>
+  conversations.value.map((item) => ({
+    id: item.id,
+    title: item.title || '新对话',
+    lastMessage: item.lastMessage || '',
+    messageCount: item.messageCount ?? 0,
+    updatedAt: formatFriendlyTime(item.updatedAt || item.createdAt),
+  }))
+);
+
+const currentConversation = computed(() =>
+  conversations.value.find((item) => item.id === currentConversationId.value)
+);
+
+const currentConversationTitle = computed(() => currentConversation.value?.title || '山洪防御空间辅助决策会话');
 
 const isKnowledgeBusy = computed(
   () => isLoadingDocuments.value || isUploadingDocument.value || Boolean(operatingDocumentId.value) || isGraphBusy.value
@@ -1096,25 +1186,18 @@ const boxSelectionStyle = computed(() => {
   };
 });
 
-function getOrCreateChatId() {
-  let chatId = localStorage.getItem(CHAT_ID_STORAGE_KEY);
-  if (!chatId) {
-    chatId = crypto.randomUUID();
-    localStorage.setItem(CHAT_ID_STORAGE_KEY, chatId);
-  }
-  return chatId;
+function createOpeningMessages() {
+  return [
+    {
+      id: crypto.randomUUID(),
+      role: 'assistant',
+      content: openingMessage,
+      isTyping: false,
+    },
+  ];
 }
 
-const chatId = getOrCreateChatId();
-
-const messages = ref([
-  {
-    id: crypto.randomUUID(),
-    role: 'assistant',
-    content: openingMessage,
-    isTyping: false,
-  },
-]);
+const messages = ref(createOpeningMessages());
 
 const inputValue = ref('');
 const isStreaming = ref(false);
@@ -1125,11 +1208,12 @@ let eventSource = null;
 let typingQueue = Promise.resolve();
 let responseGenerationId = 0;
 
-const canSend = computed(() => inputValue.value.length > 0 && !isStreaming.value);
+const canSend = computed(() => inputValue.value.length > 0 && !isStreaming.value && !isLoadingConversationMessages.value);
 
 onMounted(async () => {
   await loadCurrentUser();
   if (currentUser.value) {
+    await fetchConversations({ selectLatest: true });
     scrollToBottom({ behavior: 'auto', force: true });
   }
 });
@@ -1204,6 +1288,7 @@ async function submitAuth() {
     authForm.value.password = '';
     authForm.value.confirmPassword = '';
     activeView.value = 'chat';
+    await fetchConversations({ selectLatest: true });
     shouldAutoScroll.value = true;
     await nextTick();
     scrollToBottom({ behavior: 'auto', force: true });
@@ -1228,6 +1313,9 @@ async function logoutCurrentUser() {
   authError.value = '';
   authNotice.value = '已退出登录';
   users.value = [];
+  conversations.value = [];
+  currentConversationId.value = '';
+  messages.value = createOpeningMessages();
 }
 
 function handleUnauthorized(error) {
@@ -1239,7 +1327,130 @@ function handleUnauthorized(error) {
   activeView.value = 'chat';
   authMode.value = 'login';
   authError.value = '登录状态已过期，请重新登录';
+  conversations.value = [];
+  currentConversationId.value = '';
+  messages.value = createOpeningMessages();
   return true;
+}
+
+async function fetchConversations({ selectLatest = false } = {}) {
+  if (!currentUser.value) {
+    return;
+  }
+
+  conversationError.value = '';
+  isLoadingConversations.value = true;
+  try {
+    const { data } = await getChatConversations();
+    conversations.value = Array.isArray(data) ? data : [];
+
+    if (selectLatest && conversations.value.length > 0) {
+      await selectConversation(conversations.value[0].id, { silent: true });
+      return;
+    }
+
+    if (currentConversationId.value
+        && !conversations.value.some((item) => item.id === currentConversationId.value)) {
+      currentConversationId.value = '';
+      messages.value = createOpeningMessages();
+    }
+  } catch (error) {
+    if (!handleUnauthorized(error)) {
+      conversationError.value = getErrorMessage(error, '加载历史记录失败');
+    }
+  } finally {
+    isLoadingConversations.value = false;
+  }
+}
+
+async function createNewConversation() {
+  if (isStreaming.value) {
+    return;
+  }
+
+  conversationError.value = '';
+  try {
+    const { data } = await createChatConversation('新对话');
+    if (data?.id) {
+      conversations.value = [data, ...conversations.value.filter((item) => item.id !== data.id)];
+      currentConversationId.value = data.id;
+      messages.value = createOpeningMessages();
+      inputValue.value = '';
+      shouldAutoScroll.value = true;
+      await nextTick();
+      scrollToBottom({ behavior: 'auto', force: true });
+    }
+  } catch (error) {
+    if (!handleUnauthorized(error)) {
+      conversationError.value = getErrorMessage(error, '新建对话失败');
+    }
+  }
+}
+
+async function ensureActiveConversation(firstMessage) {
+  if (currentConversationId.value) {
+    return currentConversationId.value;
+  }
+
+  const { data } = await createChatConversation(buildConversationTitle(firstMessage));
+  if (!data?.id) {
+    throw new Error('新建对话失败');
+  }
+  conversations.value = [data, ...conversations.value.filter((item) => item.id !== data.id)];
+  currentConversationId.value = data.id;
+  return data.id;
+}
+
+async function selectConversation(conversationId, { silent = false } = {}) {
+  if (!conversationId || (isStreaming.value && !silent)) {
+    return;
+  }
+
+  conversationError.value = '';
+  isLoadingConversationMessages.value = true;
+  try {
+    const { data } = await getChatMessages(conversationId);
+    currentConversationId.value = conversationId;
+    messages.value = normalizeHistoryMessages(data);
+    shouldAutoScroll.value = true;
+    await nextTick();
+    scrollToBottom({ behavior: 'auto', force: true });
+  } catch (error) {
+    if (!handleUnauthorized(error)) {
+      conversationError.value = getErrorMessage(error, '加载对话消息失败');
+    }
+  } finally {
+    isLoadingConversationMessages.value = false;
+  }
+}
+
+async function deleteConversationItem(item) {
+  if (!item?.id || isStreaming.value) {
+    return;
+  }
+
+  const confirmed = window.confirm(`确认删除对话「${item.title || '新对话'}」吗？`);
+  if (!confirmed) {
+    return;
+  }
+
+  conversationError.value = '';
+  try {
+    const { data } = await deleteChatConversation(item.id);
+    if (!data) {
+      conversationError.value = '删除对话失败';
+      return;
+    }
+    conversations.value = conversations.value.filter((conversation) => conversation.id !== item.id);
+    if (currentConversationId.value === item.id) {
+      currentConversationId.value = '';
+      messages.value = createOpeningMessages();
+    }
+  } catch (error) {
+    if (!handleUnauthorized(error)) {
+      conversationError.value = getErrorMessage(error, '删除对话失败');
+    }
+  }
 }
 
 async function switchView(view) {
@@ -1248,6 +1459,7 @@ async function switchView(view) {
   }
   activeView.value = view;
   if (view === 'chat') {
+    await fetchConversations();
     shouldAutoScroll.value = true;
     scrollToBottom({ behavior: 'auto', force: true });
     return;
@@ -2027,6 +2239,56 @@ function formatDateTime(value) {
   });
 }
 
+function formatFriendlyTime(value) {
+  if (!value) {
+    return '-';
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  const now = new Date();
+  const today = now.toDateString() === date.toDateString();
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+
+  const timeText = date.toLocaleTimeString('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  if (today) {
+    return timeText;
+  }
+  if (yesterday.toDateString() === date.toDateString()) {
+    return `昨天 ${timeText}`;
+  }
+  return date.toLocaleDateString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+  });
+}
+
+function normalizeHistoryMessages(items = []) {
+  const historyMessages = Array.isArray(items)
+    ? items.map((item) => ({
+        id: item.id || crypto.randomUUID(),
+        role: item.role === 'user' ? 'user' : 'assistant',
+        content: item.content || '',
+        isTyping: false,
+      }))
+    : [];
+  return historyMessages.length > 0 ? historyMessages : createOpeningMessages();
+}
+
+function buildConversationTitle(message) {
+  const text = String(message || '').replace(/\s+/g, ' ').trim();
+  if (!text) {
+    return '新对话';
+  }
+  return text.length <= 24 ? text : `${text.slice(0, 24)}...`;
+}
+
 function setKnowledgeNotice(message) {
   knowledgeNotice.value = message;
   window.setTimeout(() => {
@@ -2299,7 +2561,7 @@ function stopGeneration() {
   isStreaming.value = false;
 }
 
-function sendMessage() {
+async function sendMessage() {
   if (!canSend.value) {
     return;
   }
@@ -2308,6 +2570,15 @@ function sendMessage() {
   const currentGenerationId = responseGenerationId;
   shouldAutoScroll.value = isNearBottom();
   const userMessage = inputValue.value;
+
+  let activeConversationId = '';
+  try {
+    activeConversationId = await ensureActiveConversation(userMessage);
+  } catch (error) {
+    conversationError.value = getErrorMessage(error, '新建对话失败，请稍后重试');
+    return;
+  }
+
   inputValue.value = '';
 
   pushMessage('user', userMessage);
@@ -2325,7 +2596,7 @@ function sendMessage() {
   closeEventSource();
 
   let hasReceivedData = false;
-  eventSource = new EventSource(buildManusSseUrl(userMessage, chatId), {
+  eventSource = new EventSource(buildManusSseUrl(userMessage, activeConversationId), {
     withCredentials: true,
   });
 
@@ -2363,6 +2634,7 @@ function sendMessage() {
 
     await typingQueue.catch(() => undefined);
     isStreaming.value = false;
+    await fetchConversations();
     scrollToBottom();
   };
 }

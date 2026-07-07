@@ -110,3 +110,21 @@ export function deleteUser(userId) {
 export function logoutUser() {
   return apiClient.post('/user/logout');
 }
+
+export function getChatConversations() {
+  return apiClient.get('/chat/conversations');
+}
+
+export function createChatConversation(title = '') {
+  return apiClient.post('/chat/conversations', {
+    title,
+  });
+}
+
+export function getChatMessages(conversationId) {
+  return apiClient.get(`/chat/conversations/${encodeURIComponent(conversationId)}/messages`);
+}
+
+export function deleteChatConversation(conversationId) {
+  return apiClient.delete(`/chat/conversations/${encodeURIComponent(conversationId)}`);
+}
