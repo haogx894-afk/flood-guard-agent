@@ -2,7 +2,7 @@
   <main class="app-root" :class="{ 'auth-root': !currentUser }">
     <section v-if="isAuthChecking" class="auth-screen" aria-label="正在检查登录状态">
       <div class="auth-shell fluent-card">
-        <img class="auth-logo" src="/flood-logo.png" alt="网站 logo" />
+<!--        <img class="auth-logo" src="/flood-logo.png" alt="网站 logo" />-->
         <p class="auth-kicker">Flood Intelligence Workspace</p>
         <h1>正在进入北京市山洪防御空间辅助决策智能体</h1>
         <p class="auth-copy">正在检查登录状态，请稍候。</p>
@@ -12,10 +12,10 @@
     <section v-else-if="!currentUser" class="auth-screen" aria-label="用户登录注册">
       <div class="auth-layout">
         <section class="auth-hero">
-          <img class="auth-hero-logo" src="/flood-logo.png" alt="网站 logo" />
-          <p>Graph RAG · Spatial Decision Agent</p>
+<!--          <img class="auth-hero-logo" src="/flood-logo.png" alt="网站 logo" />-->
+<!--          <p>Graph RAG · Spatial Decision Agent</p>-->
           <h1>北京市山洪防御空间辅助决策智能体</h1>
-          <span>融合 RAG 知识库、Neo4j 知识图谱与智能体工具调用，辅助开展预案查询、空间研判和风险对象排查。</span>
+          <span>融合 RAG 知识库、Neo4j 知识图谱与智能体工具调用，辅助开展预案查询等功能。</span>
         </section>
 
         <section class="auth-card fluent-card">
@@ -83,6 +83,14 @@
           </form>
         </section>
       </div>
+
+      <footer class="auth-footer" aria-label="版权信息">
+        <span>Copyright © 2026 北京市山洪防御空间辅助决策智能体</span>
+        <i aria-hidden="true"></i>
+        <span>All Rights Reserved</span>
+        <i aria-hidden="true"></i>
+        <span>Powered by HGX AI Agent</span>
+      </footer>
     </section>
 
     <section v-else class="app-frame" aria-label="北京市山洪防御空间辅助决策智能体">

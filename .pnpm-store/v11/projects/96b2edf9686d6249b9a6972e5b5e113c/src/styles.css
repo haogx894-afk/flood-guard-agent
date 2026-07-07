@@ -352,7 +352,7 @@ h3 {
 .auth-hero h1 {
   max-width: 640px;
   margin-top: 10px;
-  color: #ffffff;
+  color: #000000;
   font-size: 34px;
   line-height: 1.2;
   white-space: normal;
@@ -362,7 +362,7 @@ h3 {
 .auth-copy {
   max-width: 580px;
   margin-top: 14px;
-  color: rgba(248, 251, 255, 0.82);
+  color: rgba(255, 255, 255, 0.9);
   font-size: 14px;
   line-height: 1.8;
 }
@@ -517,6 +517,32 @@ h3 {
 .auth-submit:disabled {
   cursor: not-allowed;
   opacity: 0.58;
+}
+
+.auth-footer {
+  position: fixed;
+  right: 24px;
+  bottom: 18px;
+  left: 24px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: rgba(49, 70, 90, 0.62);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.6;
+  text-align: center;
+  pointer-events: none;
+}
+
+.auth-footer i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(0, 120, 212, 0.28);
 }
 
 .workspace {
@@ -2228,6 +2254,7 @@ h3 {
 
   .auth-screen {
     padding: 18px;
+    padding-bottom: 58px;
   }
 
   .auth-layout {
@@ -2336,6 +2363,7 @@ h3 {
   .auth-screen {
     height: 100dvh;
     padding: 12px;
+    padding-bottom: 72px;
   }
 
   .auth-layout {
@@ -2370,6 +2398,14 @@ h3 {
   .auth-shell {
     padding: 18px;
     border-radius: 14px;
+  }
+
+  .auth-footer {
+    right: 12px;
+    bottom: 12px;
+    left: 12px;
+    gap: 6px;
+    font-size: 11px;
   }
 
   .topbar {
