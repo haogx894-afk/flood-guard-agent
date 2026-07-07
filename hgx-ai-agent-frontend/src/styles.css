@@ -766,6 +766,88 @@ h3 {
   font-size: 13px;
 }
 
+.bubble-content.rich {
+  display: grid;
+  gap: 8px;
+  white-space: normal;
+}
+
+.rich-heading,
+.rich-paragraph {
+  margin: 0;
+}
+
+.rich-heading {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  padding: 5px 10px;
+  border: 1px solid rgba(0, 120, 212, 0.14);
+  border-radius: 999px;
+  color: #005a9e;
+  background: rgba(0, 120, 212, 0.08);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.rich-paragraph {
+  color: #18324a;
+  line-height: 1.72;
+}
+
+.rich-list {
+  display: grid;
+  gap: 7px;
+  margin: 2px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rich-list-item {
+  display: grid;
+  grid-template-columns: 8px auto minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(0, 120, 212, 0.1);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(238, 247, 255, 0.56)),
+    rgba(255, 255, 255, 0.58);
+}
+
+.rich-list-dot {
+  width: 7px;
+  height: 7px;
+  margin-top: 7px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #0f8de8, #0067c0);
+  box-shadow: 0 0 0 4px rgba(0, 120, 212, 0.08);
+}
+
+.rich-list-label {
+  max-width: 150px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: #005a9e;
+  background: rgba(0, 120, 212, 0.1);
+  font-size: 12px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.rich-list-text {
+  min-width: 0;
+  color: #18324a;
+  line-height: 1.68;
+}
+
+.rich-strong {
+  color: #005a9e;
+  font-weight: 850;
+}
+
 .message-row.is-typing .bubble {
   will-change: contents;
 }
