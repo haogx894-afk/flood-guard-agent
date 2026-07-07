@@ -8,6 +8,8 @@ server:
   port: 8123
   servlet:
     context-path: /api
+    session:
+      timeout: 1d
 # springdoc-openapi ??????
 springdoc:
   swagger-ui:
