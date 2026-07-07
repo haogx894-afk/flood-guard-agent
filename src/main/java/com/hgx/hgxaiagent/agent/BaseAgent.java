@@ -44,6 +44,11 @@ public abstract class BaseAgent {
      */
     private Consumer<List<Message>> memorySaver;
 
+    /**
+     * SSE 每输出一个前端可见的气泡内容时，用它把内容保存到外部存储。
+     */
+    private Consumer<String> streamOutputSaver;
+
     public String run(String userPrompt) {
         validateUserPrompt(userPrompt);
 
@@ -94,19 +99,19 @@ public abstract class BaseAgent {
 
                     String stepResult = step();
                     String output = formatStepOutput(stepNumber, stepResult);
-                    sseEmitter.send(output);
+                    sendStreamOutput(sseEmitter, output);
                 }
 
                 if (currentStep >= maxSteps) {
                     state = AgentState.FINISHED;
-                    sseEmitter.send("执行结束：达到最大步骤数（" + maxSteps + "）");
+                    sendStreamOutput(sseEmitter, "执行结束：达到最大步骤数（" + maxSteps + "）");
                 }
                 sseEmitter.complete();
             } catch (Exception e) {
                 state = AgentState.ERROR;
                 log.error("error executing agent", e);
                 try {
-                    sseEmitter.send("执行错误：" + e.getMessage());
+                    sendStreamOutput(sseEmitter, "执行错误：" + e.getMessage());
                     sseEmitter.complete();
                 } catch (IOException ex) {
                     sseEmitter.completeWithError(ex);
@@ -150,6 +155,11 @@ public abstract class BaseAgent {
         return stepResult;
     }
 
+    private void sendStreamOutput(SseEmitter sseEmitter, String output) throws IOException {
+        sseEmitter.send(output);
+        saveStreamOutput(output);
+    }
+
     /**
      * 子类可以按当前步骤的类型决定是否显示 Step 前缀。
      */
@@ -166,6 +176,17 @@ public abstract class BaseAgent {
     protected void saveMemory() {
         if (this.memorySaver != null) {
             this.memorySaver.accept(new ArrayList<>(this.messageList));
+        }
+    }
+
+    protected void saveStreamOutput(String output) {
+        if (this.streamOutputSaver == null || StrUtil.isBlank(output)) {
+            return;
+        }
+        try {
+            this.streamOutputSaver.accept(output);
+        } catch (Exception e) {
+            log.warn("保存 SSE 输出失败", e);
         }
     }
 }
