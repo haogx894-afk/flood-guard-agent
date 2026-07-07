@@ -1,6 +1,91 @@
 <template>
-  <main class="app-root">
-    <section class="app-frame" aria-label="北京市山洪防御空间辅助决策智能体">
+  <main class="app-root" :class="{ 'auth-root': !currentUser }">
+    <section v-if="isAuthChecking" class="auth-screen" aria-label="正在检查登录状态">
+      <div class="auth-shell fluent-card">
+        <img class="auth-logo" src="/flood-logo.png" alt="网站 logo" />
+        <p class="auth-kicker">Flood Intelligence Workspace</p>
+        <h1>正在进入北京市山洪防御空间辅助决策智能体</h1>
+        <p class="auth-copy">正在检查登录状态，请稍候。</p>
+      </div>
+    </section>
+
+    <section v-else-if="!currentUser" class="auth-screen" aria-label="用户登录注册">
+      <div class="auth-layout">
+        <section class="auth-hero">
+          <img class="auth-hero-logo" src="/flood-logo.png" alt="网站 logo" />
+          <p>Graph RAG · Spatial Decision Agent</p>
+          <h1>北京市山洪防御空间辅助决策智能体</h1>
+          <span>融合 RAG 知识库、Neo4j 知识图谱与智能体工具调用，辅助开展预案查询、空间研判和风险对象排查。</span>
+        </section>
+
+        <section class="auth-card fluent-card">
+          <div class="auth-tabs" role="tablist" aria-label="认证方式">
+            <button
+              type="button"
+              :class="{ active: authMode === 'login' }"
+              @click="switchAuthMode('login')"
+            >
+              登录
+            </button>
+            <button
+              type="button"
+              :class="{ active: authMode === 'register' }"
+              @click="switchAuthMode('register')"
+            >
+              注册
+            </button>
+          </div>
+
+          <div class="auth-card-heading">
+            <p>{{ authMode === 'login' ? 'Welcome Back' : 'Create Account' }}</p>
+            <h2>{{ authMode === 'login' ? '登录工作台' : '创建新账号' }}</h2>
+          </div>
+
+          <div v-if="authError" class="message-banner error">
+            {{ authError }}
+          </div>
+          <div v-if="authNotice" class="message-banner">
+            {{ authNotice }}
+          </div>
+
+          <form class="auth-form" @submit.prevent="submitAuth">
+            <label>
+              账号
+              <input
+                v-model.trim="authForm.account"
+                type="text"
+                autocomplete="username"
+                placeholder="请输入账号，不少于 4 位"
+              />
+            </label>
+            <label>
+              密码
+              <input
+                v-model.trim="authForm.password"
+                type="password"
+                autocomplete="current-password"
+                placeholder="请输入密码，不少于 8 位"
+              />
+            </label>
+            <label v-if="authMode === 'register'">
+              确认密码
+              <input
+                v-model.trim="authForm.confirmPassword"
+                type="password"
+                autocomplete="new-password"
+                placeholder="请再次输入密码"
+              />
+            </label>
+
+            <button type="submit" class="auth-submit" :disabled="isAuthSubmitting">
+              {{ authSubmitText }}
+            </button>
+          </form>
+        </section>
+      </div>
+    </section>
+
+    <section v-else class="app-frame" aria-label="北京市山洪防御空间辅助决策智能体">
       <header class="topbar">
         <div class="brand">
           <img class="brand-mark" src="/flood-logo.png" alt="网站 logo" />
@@ -26,7 +111,23 @@
             >
               知识库管理
             </button>
+            <button
+              v-if="canManageUsers"
+              type="button"
+              :class="{ active: activeView === 'users' }"
+              @click="switchView('users')"
+            >
+              用户管理
+            </button>
           </nav>
+
+          <div class="current-user-chip">
+            <span>{{ currentUser.userAccount || currentUser.username || '用户' }}</span>
+            <strong>{{ canManageUsers ? '管理员' : '普通用户' }}</strong>
+          </div>
+          <button type="button" class="logout-button" @click="logoutCurrentUser">
+            退出
+          </button>
 
           <div class="runtime-status" :class="{ active: isStreaming || isKnowledgeBusy }">
             <span aria-hidden="true"></span>
@@ -102,7 +203,7 @@
           </form>
         </section>
 
-        <section v-else class="knowledge-card fluent-card">
+        <section v-else-if="activeView === 'knowledge'" class="knowledge-card fluent-card">
           <div class="knowledge-header">
             <div>
               <p class="section-kicker">Knowledge Base Management</p>
@@ -551,24 +652,123 @@
             </div>
           </section>
         </section>
+
+        <section v-else class="user-admin-card fluent-card">
+          <div class="user-admin-header">
+            <div>
+              <p class="section-kicker">User Administration</p>
+              <h2>用户管理</h2>
+            </div>
+            <div class="user-admin-actions">
+              <input
+                v-model.trim="userSearchKeyword"
+                type="text"
+                placeholder="按用户名搜索"
+                @keydown.enter.prevent="fetchUsers"
+              />
+              <button type="button" :disabled="isUserBusy" @click="fetchUsers">
+                搜索 / 刷新
+              </button>
+            </div>
+          </div>
+
+          <section class="user-admin-body">
+            <div v-if="userError" class="message-banner error">
+              {{ userError }}
+            </div>
+            <div v-if="userNotice" class="message-banner">
+              {{ userNotice }}
+            </div>
+
+            <div class="stat-grid user-stat-grid">
+              <div v-for="item in userStats" :key="item.label" class="stat-card">
+                <span>{{ item.value }}</span>
+                <p>{{ item.label }}</p>
+              </div>
+            </div>
+
+            <div class="table-card">
+              <div class="table-header">
+                <div>
+                  <h3>系统用户</h3>
+                  <p>管理员可以查询用户并删除普通账号。</p>
+                </div>
+              </div>
+
+              <div class="user-table">
+                <div class="user-row user-head">
+                  <span>ID</span>
+                  <span>账号</span>
+                  <span>用户名</span>
+                  <span>角色</span>
+                  <span>状态</span>
+                  <span>创建时间</span>
+                  <span>操作</span>
+                </div>
+
+                <div v-if="isLoadingUsers" class="empty-row">
+                  正在加载用户列表...
+                </div>
+                <div v-else-if="userRows.length === 0" class="empty-row">
+                  暂无用户数据。
+                </div>
+
+                <template v-else>
+                  <div
+                    v-for="user in userRows"
+                    :key="user.id"
+                    class="user-row"
+                  >
+                    <span>{{ user.id }}</span>
+                    <span class="doc-name">{{ user.userAccount }}</span>
+                    <span>{{ user.username }}</span>
+                    <span>
+                      <em :class="['role-pill', user.userRole === 1 ? 'admin' : 'normal']">
+                        {{ getRoleText(user.userRole) }}
+                      </em>
+                    </span>
+                    <span>{{ user.userStatus === 0 ? '正常' : '禁用' }}</span>
+                    <span>{{ formatDateTime(user.createTime) }}</span>
+                    <span class="row-actions">
+                      <button
+                        type="button"
+                        class="danger"
+                        :disabled="isUserBusy || user.id === currentUser.id"
+                        @click="deleteUserAccount(user)"
+                      >
+                        {{ user.id === currentUser.id ? '当前用户' : '删除' }}
+                      </button>
+                    </span>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </section>
+        </section>
       </div>
     </section>
   </main>
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import ChatMessage from './components/ChatMessage.vue';
 import {
   buildManusSseUrl,
+  deleteUser,
   deleteKnowledgeDocument,
+  getCurrentUser,
   getKnowledgeGraphHealth,
   getKnowledgeGraphNode,
   getKnowledgeGraphRelationship,
   getKnowledgeGraphStats,
   getKnowledgeDocuments,
+  loginUser,
+  logoutUser,
   rebuildKnowledgeDocument,
+  registerUser,
   searchKnowledgeGraph,
+  searchUsers,
   uploadKnowledgeDocument,
   visualizeKnowledgeGraph,
 } from './services/api';
@@ -577,6 +777,25 @@ const CHAT_ID_STORAGE_KEY = 'hgx-ai-agent-chat-id';
 const CONNECTING_MESSAGE = '正在连接防汛智能体...';
 const AUTO_SCROLL_THRESHOLD = 20;
 const openingMessage = '您好！我是您的专属防汛管家。在制定方案前，我需要先了解您的问题。请输入您的问题？';
+
+const currentUser = ref(null);
+const isAuthChecking = ref(true);
+const isAuthSubmitting = ref(false);
+const authMode = ref('login');
+const authError = ref('');
+const authNotice = ref('');
+const authForm = ref({
+  account: '',
+  password: '',
+  confirmPassword: '',
+});
+
+const userSearchKeyword = ref('');
+const users = ref([]);
+const isLoadingUsers = ref(false);
+const deletingUserId = ref('');
+const userError = ref('');
+const userNotice = ref('');
 
 const activeView = ref('chat');
 const knowledgeTab = ref('documents');
@@ -687,6 +906,38 @@ const graphStats = computed(() => [
   { key: 'searchNodes', label: '搜索实体', value: formatNumber(graphSearchResult.value?.nodeCount) },
   { key: 'searchRelationships', label: '搜索关系', value: formatNumber(graphSearchResult.value?.relationshipCount) },
 ]);
+
+const canManageUsers = computed(() => currentUser.value?.userRole === 1);
+
+const authSubmitText = computed(() => {
+  if (isAuthSubmitting.value) {
+    return authMode.value === 'login' ? '正在登录...' : '正在注册...';
+  }
+  return authMode.value === 'login' ? '进入工作台' : '注册并进入';
+});
+
+const isUserBusy = computed(() => isLoadingUsers.value || Boolean(deletingUserId.value));
+
+const userRows = computed(() =>
+  users.value.map((user) => ({
+    id: user.id,
+    username: user.username || '-',
+    userAccount: user.userAccount || '-',
+    userRole: user.userRole ?? 0,
+    userStatus: user.userStatus ?? 0,
+    createTime: user.createTime,
+  }))
+);
+
+const userStats = computed(() => {
+  const adminCount = users.value.filter((user) => user.userRole === 1).length;
+  return [
+    { label: '当前用户', value: currentUser.value?.userAccount || '-' },
+    { label: '查询结果', value: users.value.length },
+    { label: '管理员', value: adminCount },
+    { label: '普通用户', value: Math.max(users.value.length - adminCount, 0) },
+  ];
+});
 
 const isKnowledgeBusy = computed(
   () => isLoadingDocuments.value || isUploadingDocument.value || Boolean(operatingDocumentId.value) || isGraphBusy.value
@@ -876,11 +1127,133 @@ let responseGenerationId = 0;
 
 const canSend = computed(() => inputValue.value.length > 0 && !isStreaming.value);
 
+onMounted(async () => {
+  await loadCurrentUser();
+  if (currentUser.value) {
+    scrollToBottom({ behavior: 'auto', force: true });
+  }
+});
+
+async function loadCurrentUser() {
+  isAuthChecking.value = true;
+  authError.value = '';
+  try {
+    const { data } = await getCurrentUser();
+    currentUser.value = data || null;
+  } catch (error) {
+    currentUser.value = null;
+    if (error?.response?.status && error.response.status !== 401) {
+      authError.value = getErrorMessage(error, '检查登录状态失败，请稍后重试');
+    }
+  } finally {
+    isAuthChecking.value = false;
+  }
+}
+
+function switchAuthMode(mode) {
+  authMode.value = mode;
+  authError.value = '';
+  authNotice.value = '';
+}
+
+function validateAuthForm() {
+  if (authForm.value.account.length < 4) {
+    authError.value = '账号不能少于 4 位';
+    return false;
+  }
+  if (authForm.value.password.length < 8) {
+    authError.value = '密码不能少于 8 位';
+    return false;
+  }
+  if (authMode.value === 'register' && authForm.value.password !== authForm.value.confirmPassword) {
+    authError.value = '两次输入的密码不一致';
+    return false;
+  }
+  return true;
+}
+
+async function submitAuth() {
+  authError.value = '';
+  authNotice.value = '';
+  if (!validateAuthForm()) {
+    return;
+  }
+
+  isAuthSubmitting.value = true;
+  try {
+    if (authMode.value === 'register') {
+      const registerResponse = await registerUser(
+        authForm.value.account,
+        authForm.value.password,
+        authForm.value.confirmPassword
+      );
+      if (!registerResponse.data || Number(registerResponse.data) <= 0) {
+        authError.value = '注册失败，账号可能已存在或参数不符合要求';
+        return;
+      }
+    }
+
+    const { data } = await loginUser(authForm.value.account, authForm.value.password);
+    if (!data || !data.id) {
+      authError.value = authMode.value === 'login' ? '登录失败，请检查账号或密码' : '注册成功，但自动登录失败，请重新登录';
+      return;
+    }
+
+    currentUser.value = data;
+    authNotice.value = '';
+    authForm.value.password = '';
+    authForm.value.confirmPassword = '';
+    activeView.value = 'chat';
+    shouldAutoScroll.value = true;
+    await nextTick();
+    scrollToBottom({ behavior: 'auto', force: true });
+  } catch (error) {
+    authError.value = getErrorMessage(error, authMode.value === 'login' ? '登录失败' : '注册失败');
+  } finally {
+    isAuthSubmitting.value = false;
+  }
+}
+
+async function logoutCurrentUser() {
+  closeEventSource();
+  stopGeneration();
+  try {
+    await logoutUser();
+  } catch {
+    // 即使后端退出接口失败，也清理前端登录态，避免用户卡在页面里。
+  }
+  currentUser.value = null;
+  activeView.value = 'chat';
+  authMode.value = 'login';
+  authError.value = '';
+  authNotice.value = '已退出登录';
+  users.value = [];
+}
+
+function handleUnauthorized(error) {
+  if (error?.response?.status !== 401) {
+    return false;
+  }
+  closeEventSource();
+  currentUser.value = null;
+  activeView.value = 'chat';
+  authMode.value = 'login';
+  authError.value = '登录状态已过期，请重新登录';
+  return true;
+}
+
 async function switchView(view) {
+  if (view === 'users' && !canManageUsers.value) {
+    return;
+  }
   activeView.value = view;
   if (view === 'chat') {
     shouldAutoScroll.value = true;
     scrollToBottom({ behavior: 'auto', force: true });
+    return;
+  }
+  if (view === 'users') {
+    await fetchUsers();
     return;
   }
   if (view === 'knowledge') {
@@ -888,6 +1261,55 @@ async function switchView(view) {
     if (knowledgeTab.value === 'graph') {
       await loadGraphInitialData();
     }
+  }
+}
+
+async function fetchUsers() {
+  if (!canManageUsers.value) {
+    userError.value = '只有管理员可以管理用户';
+    return;
+  }
+  userError.value = '';
+  isLoadingUsers.value = true;
+  try {
+    const { data } = await searchUsers(userSearchKeyword.value);
+    users.value = Array.isArray(data) ? data : [];
+  } catch (error) {
+    if (!handleUnauthorized(error)) {
+      userError.value = getErrorMessage(error, '加载用户列表失败');
+    }
+  } finally {
+    isLoadingUsers.value = false;
+  }
+}
+
+async function deleteUserAccount(user) {
+  if (!user?.id || user.id === currentUser.value?.id) {
+    return;
+  }
+
+  const confirmed = window.confirm(`确认删除账号「${user.userAccount}」吗？删除后该用户将无法登录。`);
+  if (!confirmed) {
+    return;
+  }
+
+  userError.value = '';
+  userNotice.value = '';
+  deletingUserId.value = user.id;
+  try {
+    const { data } = await deleteUser(user.id);
+    if (!data) {
+      userError.value = '删除失败，请确认当前账号是否拥有管理员权限';
+      return;
+    }
+    setUserNotice(`已删除账号「${user.userAccount}」`);
+    await fetchUsers();
+  } catch (error) {
+    if (!handleUnauthorized(error)) {
+      userError.value = getErrorMessage(error, '删除用户失败');
+    }
+  } finally {
+    deletingUserId.value = '';
   }
 }
 
@@ -920,7 +1342,9 @@ async function loadGraphHealth() {
     const { data } = await getKnowledgeGraphHealth();
     graphHealth.value = data;
   } catch (error) {
-    graphError.value = getErrorMessage(error, 'Neo4j 健康检查失败');
+    if (!handleUnauthorized(error)) {
+      graphError.value = getErrorMessage(error, 'Neo4j 健康检查失败');
+    }
   } finally {
     isLoadingGraphHealth.value = false;
   }
@@ -933,7 +1357,9 @@ async function loadGraphStats() {
     const { data } = await getKnowledgeGraphStats();
     graphStatsData.value = data;
   } catch (error) {
-    graphError.value = getErrorMessage(error, '加载知识图谱统计失败');
+    if (!handleUnauthorized(error)) {
+      graphError.value = getErrorMessage(error, '加载知识图谱统计失败');
+    }
   } finally {
     isLoadingGraphStats.value = false;
   }
@@ -974,7 +1400,9 @@ async function loadGraphData() {
       graphNotice.value = '当前关键词没有查询到可视化图谱结果，可以换一个村名、河流名、站点名或危险区名称。';
     }
   } catch (error) {
-    graphError.value = getErrorMessage(error, '加载知识图谱失败');
+    if (!handleUnauthorized(error)) {
+      graphError.value = getErrorMessage(error, '加载知识图谱失败');
+    }
   } finally {
     isLoadingGraph.value = false;
   }
@@ -1608,8 +2036,25 @@ function setKnowledgeNotice(message) {
   }, 2600);
 }
 
+function setUserNotice(message) {
+  userNotice.value = message;
+  window.setTimeout(() => {
+    if (userNotice.value === message) {
+      userNotice.value = '';
+    }
+  }, 2600);
+}
+
+function getRoleText(role) {
+  return role === 1 ? '管理员' : '普通用户';
+}
+
 function getErrorMessage(error, fallback) {
-  return error?.response?.data?.message || error?.response?.data || error?.message || fallback;
+  const data = error?.response?.data;
+  if (typeof data === 'string') {
+    return data;
+  }
+  return data?.message || error?.message || fallback;
 }
 
 async function fetchDocuments() {
@@ -1619,7 +2064,9 @@ async function fetchDocuments() {
     const { data } = await getKnowledgeDocuments();
     knowledgeDocuments.value = Array.isArray(data) ? data : [];
   } catch (error) {
-    knowledgeError.value = getErrorMessage(error, '加载知识库文档失败');
+    if (!handleUnauthorized(error)) {
+      knowledgeError.value = getErrorMessage(error, '加载知识库文档失败');
+    }
   } finally {
     isLoadingDocuments.value = false;
   }
@@ -1878,7 +2325,9 @@ function sendMessage() {
   closeEventSource();
 
   let hasReceivedData = false;
-  eventSource = new EventSource(buildManusSseUrl(userMessage, chatId));
+  eventSource = new EventSource(buildManusSseUrl(userMessage, chatId), {
+    withCredentials: true,
+  });
 
   eventSource.onmessage = (event) => {
     if (currentGenerationId !== responseGenerationId) {

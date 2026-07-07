@@ -3,6 +3,7 @@ import axios from 'axios';
 export const apiClient = axios.create({
   baseURL: 'http://localhost:8123/api',
   timeout: 30000,
+  withCredentials: true,
 });
 
 export function buildManusSseUrl(message, chatId) {
@@ -73,4 +74,39 @@ export function getKnowledgeGraphNode(nodeId) {
 
 export function getKnowledgeGraphRelationship(relationshipId) {
   return apiClient.get(`/knowledge/graph/relationships/${encodeURIComponent(relationshipId)}`);
+}
+
+export function registerUser(userAccount, userPassword, checkPassword) {
+  return apiClient.post('/user/register', {
+    user_account: userAccount,
+    user_password: userPassword,
+    checkpassword: checkPassword,
+  });
+}
+
+export function loginUser(userAccount, userPassword) {
+  return apiClient.post('/user/login', {
+    user_account: userAccount,
+    user_password: userPassword,
+  });
+}
+
+export function getCurrentUser() {
+  return apiClient.get('/user/current');
+}
+
+export function searchUsers(username = '') {
+  return apiClient.get('/user/search', {
+    params: { username },
+  });
+}
+
+export function deleteUser(userId) {
+  return apiClient.post('/user/delete', {
+    id: userId,
+  });
+}
+
+export function logoutUser() {
+  return apiClient.post('/user/logout');
 }
