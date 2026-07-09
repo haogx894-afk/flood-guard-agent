@@ -116,18 +116,18 @@
 <!--            <artifactId>spring-ai-advisors-vector-store</artifactId>-->
 <!--        </dependency>-->
 
-        <!--        mcp依赖-->
-        <dependency>
-            <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-mcp-client-spring-boot-starter</artifactId>
-            <version>1.0.0-M6</version>
-        </dependency>
-
         <dependency>
             <groupId>com.github.victools</groupId>
             <artifactId>jsonschema-generator</artifactId>
             <version>4.38.0</version>
         </dependency>
+
+        <!-- MCP 客户端依赖：生产部署暂不启用，需要 MCP 时再取消注释 -->
+<!--        <dependency>-->
+<!--            <groupId>org.springframework.ai</groupId>-->
+<!--            <artifactId>spring-ai-mcp-client-spring-boot-starter</artifactId>-->
+<!--            <version>1.0.0-M6</version>-->
+<!--        </dependency>-->
 
         <!-- DashScope ChatModel 支持（如果使用其他模型，请跳转 Spring AI 文档选择对应的 starter） -->
 

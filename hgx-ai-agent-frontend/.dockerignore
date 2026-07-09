@@ -1,0 +1,7 @@
+node_modules
+dist
+.git
+.idea
+*.log
+vite.out.log
+vite.err.log

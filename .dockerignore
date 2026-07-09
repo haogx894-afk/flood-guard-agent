@@ -1,0 +1,14 @@
+.git
+.idea
+.agents
+.codex
+target
+tmp
+chat-memory
+.pnpm-store
+image-search-mcp-server
+hgx-ai-agent-frontend/node_modules
+hgx-ai-agent-frontend/dist
+*.log
+**/*.log
+*.iml

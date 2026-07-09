@@ -1,0 +1,61 @@
+spring:
+  application:
+    name: hgx-ai-agent
+
+  ai:
+    dashscope:
+      api-key: ${DASHSCOPE_API_KEY}
+      chat:
+        options:
+          model: ${DASHSCOPE_CHAT_MODEL:qwen-max}
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:10}
+      minimum-idle: ${DB_POOL_MIN_IDLE:2}
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+  neo4j:
+    uri: ${SPRING_NEO4J_URI}
+    authentication:
+      username: ${SPRING_NEO4J_USERNAME}
+      password: ${SPRING_NEO4J_PASSWORD}
+
+  servlet:
+    multipart:
+      max-file-size: ${MAX_FILE_SIZE:100MB}
+      max-request-size: ${MAX_REQUEST_SIZE:100MB}
+
+server:
+  port: ${PORT:8123}
+  servlet:
+    context-path: /api
+    session:
+      timeout: ${SESSION_TIMEOUT:1d}
+
+app:
+  knowledge:
+    storage-dir: ${KNOWLEDGE_STORAGE_DIR:/data/knowledge-documents}
+
+search-api:
+  api-key: ${SEARCH_API_KEY:}
+
+springdoc:
+  api-docs:
+    enabled: false
+  swagger-ui:
+    enabled: false
+
+knife4j:
+  enable: false
+
+logging:
+  level:
+    root: INFO
+    com.hgx.hgxaiagent: INFO

@@ -21,7 +21,7 @@ import org.springframework.ai.chat.memory.InMemoryChatMemory;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.tool.ToolCallback;
-import org.springframework.ai.tool.ToolCallbackProvider;
+//import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
@@ -331,28 +331,31 @@ public class LoveApp {
         return content;
     }
 
-
-    /**
-     * 使用mcp
-     */
-    @Resource
-    public ToolCallbackProvider toolCallbackProvider;
-
-    public String doChatWithMcp(String message, String chatId) {
-        ChatResponse response = chatClient
-                .prompt()
-                .user(message)
-                .advisors(spec -> spec.param(CHAT_MEMORY_CONVERSATION_ID_KEY, chatId)
-                        .param(CHAT_MEMORY_RETRIEVE_SIZE_KEY, 10))
-                // 开启日志，便于观察效果
-                .advisors(new MyLoggerAdvisor())
-                .tools(toolCallbackProvider)
-                .call()
-                .chatResponse();
-        String content = response.getResult().getOutput().getText();
-        log.info("content: {}", content);
-        return content;
-    }
+//    /**
+//     * 使用 MCP 工具。
+//     * 生产部署暂不启用 MCP，需要时：
+//     * 1. 取消 pom.xml 中 spring-ai-mcp-client-spring-boot-starter 依赖的注释；
+//     * 2. 取消 application-local.yml 中 spring.ai.mcp 配置的注释；
+//     * 3. 取消下面 ToolCallbackProvider 和 doChatWithMcp 方法的注释。
+//     */
+//    @Resource
+//    public ToolCallbackProvider toolCallbackProvider;
+//
+//    public String doChatWithMcp(String message, String chatId) {
+//        ChatResponse response = chatClient
+//                .prompt()
+//                .user(message)
+//                .advisors(spec -> spec.param(CHAT_MEMORY_CONVERSATION_ID_KEY, chatId)
+//                        .param(CHAT_MEMORY_RETRIEVE_SIZE_KEY, 10))
+//                // 开启日志，便于观察效果
+//                .advisors(new MyLoggerAdvisor())
+//                .tools(toolCallbackProvider)
+//                .call()
+//                .chatResponse();
+//        String content = response.getResult().getOutput().getText();
+//        log.info("content: {}", content);
+//        return content;
+//    }
 
     /**
      * AI 基础对话（支持多轮对话记忆，SSE 流式传输）

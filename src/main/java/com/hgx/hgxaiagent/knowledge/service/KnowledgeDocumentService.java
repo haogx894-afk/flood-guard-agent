@@ -13,6 +13,7 @@ import org.springframework.ai.reader.tika.TikaDocumentReader;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -45,10 +46,11 @@ public class KnowledgeDocumentService {
 
     public KnowledgeDocumentService(
             KnowledgeDocumentRepository repository,
-            @Qualifier("pgVectorVectorStore") VectorStore vectorStore) {
+            @Qualifier("pgVectorVectorStore") VectorStore vectorStore,
+            @Value("${app.knowledge.storage-dir:tmp/knowledge-documents}") String storageDir) {
         this.repository = repository;
         this.vectorStore = vectorStore;
-        this.storageDir = Path.of(System.getProperty("user.dir"), "tmp", "knowledge-documents");
+        this.storageDir = Path.of(storageDir);
     }
 
     public List<KnowledgeDocument> listDocuments() {
