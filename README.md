@@ -262,27 +262,7 @@ docker build -t hgx-ai-agent-frontend .
 DEPLOYMENT_WECHAT_CLOUD.md
 ```
 
-## 安全说明
 
-以下内容不应提交到 GitHub：
-
-- 真实 API Key
-- 数据库密码
-- `application-local.yml`
-- `.env`
-- 数据库备份文件
-- 本地聊天记录
-- 临时上传文件
-- `node_modules`
-- `.pnpm-store`
-
-提交前建议执行：
-
-```bash
-git grep -n -E "sk-|api-key:|password:|HGX|123456"
-```
-
-如果发现真实密钥或密码，请先删除并重新生成相关密钥。
 
 ## 项目状态
 
