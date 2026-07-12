@@ -1,4 +1,4 @@
-# 北京市山洪防御空间辅助决策智能体
+# 北京市山洪防御辅助决策智能体
 
 一个面向山洪灾害防御场景的 AI 应用项目，融合 RAG 知识库、Neo4j 知识图谱和 Agent Tool Calling，辅助用户进行防洪预案查询、险村信息检索、监测站分析、转移路线研判和空间对象排查。
 
@@ -262,27 +262,7 @@ docker build -t hgx-ai-agent-frontend .
 DEPLOYMENT_WECHAT_CLOUD.md
 ```
 
-## 安全说明
 
-以下内容不应提交到 GitHub：
-
-- 真实 API Key
-- 数据库密码
-- `application-local.yml`
-- `.env`
-- 数据库备份文件
-- 本地聊天记录
-- 临时上传文件
-- `node_modules`
-- `.pnpm-store`
-
-提交前建议执行：
-
-```bash
-git grep -n -E "sk-|api-key:|password:|HGX|123456"
-```
-
-如果发现真实密钥或密码，请先删除并重新生成相关密钥。
 
 ## 项目状态
 
