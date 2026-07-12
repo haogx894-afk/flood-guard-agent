@@ -94,8 +94,8 @@ public class ToolCallAgent extends ReActAgent {
     @Override
     public boolean think() {
         if (StrUtil.isNotBlank(getNextStepPrompt())) {
-            UserMessage userMessage = new UserMessage(getNextStepPrompt());
-            getMessageList().add(userMessage);
+            UserMessage userMessage = new UserMessage(getNextStepPrompt());//添加下一步的提示词到用户消息中
+            getMessageList().add(userMessage);//把这次对话添加到用户对话消息列表中
         }
 
         List<Message> messageList = getMessageList();

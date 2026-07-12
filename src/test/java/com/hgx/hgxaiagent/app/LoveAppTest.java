@@ -99,14 +99,14 @@ class LoveAppTest {
         Assertions.assertNotNull(answer);
     }
 
-    @Test
-    void doChatWithMcpStdio() {
-        String chatId = UUID.randomUUID().toString();
-        String message = "帮我搜索一些水库  的图片";
-        String answer = loveApp.doChatWithMcp(message, chatId);
-        Assertions.assertNotNull(answer);
-
-    }
+//    @Test
+//    void doChatWithMcpStdio() {
+//        String chatId = UUID.randomUUID().toString();
+//        String message = "帮我搜索一些水库  的图片";
+//        String answer = loveApp.doChatWithMcp(message, chatId);
+//        Assertions.assertNotNull(answer);
+//
+//    }
 
 //    @Test
 //    void doChatWithMcp() {

@@ -57,24 +57,24 @@ public class LocalRagTool {
         }
 
         // 拼接检索结果，返回给大模型，让模型基于这些内容组织最终回答
-        StringBuilder sb = new StringBuilder();
-        sb.append("从本地 RAG 知识库检索到以下内容：\n\n");
+        StringBuilder stringBuilder = new StringBuilder();
+        stringBuilder.append("从本地 RAG 知识库检索到以下内容：\n\n");
 
         for (int i = 0; i < documents.size(); i++) {
             Document document = documents.get(i);
 
-            sb.append("【文档片段 ").append(i + 1).append("】\n");
+            stringBuilder.append("【文档片段 ").append(i + 1).append("】\n");
 
             // score 是相似度分数，用来辅助判断这个片段和问题的相关程度
-            sb.append("相似度：").append(document.getScore()).append("\n");
+            stringBuilder.append("相似度：").append(document.getScore()).append("\n");
 
             // metadata 通常包含文件名、页码等信息，方便回答时说明依据来源
-            sb.append("元数据：").append(document.getMetadata()).append("\n");
+            stringBuilder.append("元数据：").append(document.getMetadata()).append("\n");
 
             // text 是真正检索出来的文档内容
-            sb.append("内容：").append(document.getText()).append("\n\n");
+            stringBuilder.append("内容：").append(document.getText()).append("\n\n");
         }
 
-        return sb.toString();
+        return stringBuilder.toString();
     }
 }
