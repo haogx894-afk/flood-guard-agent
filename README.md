@@ -21,7 +21,7 @@
 
 ## 项目亮点
 
-- 基于 `Spring AI` 构建智能体问答链路，支持 ReAct Agent、Tool Calling 和 SSE 流式响应。
+- 基于 `Spring AI`、`LangChain4j`构建智能体问答链路，支持 ReAct Agent、Tool Calling 和 SSE 流式响应。
 - 基于 `PostgreSQL + pgvector` 搭建本地 RAG 知识库，支持 PDF 上传、切分、向量化、检索和重建。
 - 基于 `Neo4j` 构建知识图谱，支持实体关系查询、多跳路径推理和图谱增强问答。
 - 支持用户登录注册、管理员权限、用户级多轮对话历史和会话管理。
@@ -35,6 +35,7 @@
 - Java 17
 - Spring Boot 3
 - Spring AI
+- Langchain4j
 - DashScope / 通义千问
 - PostgreSQL
 - pgvector
