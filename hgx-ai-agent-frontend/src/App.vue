@@ -850,6 +850,19 @@ import {
   visualizeKnowledgeGraph,
 } from './services/api';
 
+// crypto.randomUUID 仅在 HTTPS/localhost 等安全上下文可用，
+// 纯 HTTP（如 http://IP:端口）环境下需要回退实现，否则页面白屏。
+function uuid() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 const CONNECTING_MESSAGE = '正在连接防汛智能体...';
 const AUTO_SCROLL_THRESHOLD = 20;
 const openingMessage = '您好！我是您的专属防汛管家。在制定方案前，我需要先了解您的问题。请输入您的问题？';
@@ -1197,7 +1210,7 @@ const boxSelectionStyle = computed(() => {
 function createOpeningMessages() {
   return [
     {
-      id: crypto.randomUUID(),
+      id: uuid(),
       role: 'assistant',
       content: openingMessage,
       isTyping: false,
@@ -2280,7 +2293,7 @@ function formatFriendlyTime(value) {
 function normalizeHistoryMessages(items = []) {
   const historyMessages = Array.isArray(items)
     ? items.map((item) => ({
-        id: item.id || crypto.randomUUID(),
+        id: item.id || uuid(),
         role: item.role === 'user' ? 'user' : 'assistant',
         content: item.content || '',
         isTyping: false,
@@ -2472,7 +2485,7 @@ function wait(ms) {
 
 function pushMessage(role, content) {
   messages.value.push({
-    id: crypto.randomUUID(),
+    id: uuid(),
     role,
     content,
     isTyping: false,
@@ -2489,7 +2502,7 @@ async function pushTypedAssistantMessage(fullContent, generationId) {
     return;
   }
 
-  const messageId = crypto.randomUUID();
+  const messageId = uuid();
 
   messages.value.push({
     id: messageId,
@@ -2591,7 +2604,7 @@ async function sendMessage() {
 
   pushMessage('user', userMessage);
 
-  const loadingMessageId = crypto.randomUUID();
+  const loadingMessageId = uuid();
   messages.value.push({
     id: loadingMessageId,
     role: 'assistant',

@@ -16,7 +16,9 @@ export function buildManusSseUrl(message, chatId) {
     return url;
   }
 
-  return new URL(url, apiClient.defaults.baseURL).toString();
+  // baseURL 可能是相对路径（如 /api），此时以当前页面源为基准拼接绝对地址，
+  // 避免 new URL() 因 base 不是绝对地址而抛 "Invalid base URL"。
+  return new URL(url, window.location.origin).toString();
 }
 
 export function getKnowledgeDocuments() {

@@ -5,13 +5,14 @@ WORKDIR /workspace
 COPY pom.xml ./
 COPY mvnw mvnw.cmd ./
 COPY .mvn .mvn
+COPY deploy/maven-settings.xml ./maven-settings.xml
 
 RUN chmod +x mvnw
-RUN ./mvnw -B -DskipTests dependency:go-offline
+RUN ./mvnw -s maven-settings.xml -B -DskipTests dependency:go-offline
 
 COPY src src
 
-RUN ./mvnw -B -DskipTests package \
+RUN ./mvnw -s maven-settings.xml -B -DskipTests package \
     && JAR_FILE="$(find target -maxdepth 1 -name '*.jar' ! -name '*.original' | head -n 1)" \
     && cp "$JAR_FILE" /workspace/app.jar
 

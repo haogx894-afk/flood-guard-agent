@@ -1,0 +1,99 @@
+# flood-guard-agent 一体化部署（后端 + 前端 + PostgreSQL/pgvector + Neo4j）
+# 使用方法：
+#   1. cp .env.example .env 并填写密钥
+#   2. docker compose up -d --build
+#   3. 访问 http://服务器IP/
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: fga-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请在 .env 中设置 POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-hgx_ai_agent}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./deploy/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [fga]
+
+  neo4j:
+    image: neo4j:5
+    container_name: fga-neo4j
+    restart: unless-stopped
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:?请在 .env 中设置 NEO4J_PASSWORD}
+      NEO4J_server_memory_heap_initial__size: 256m
+      NEO4J_server_memory_heap_max__size: 512m
+      NEO4J_server_memory_pagecache_size: 256m
+    volumes:
+      - neo4j-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [fga]
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: hgx-ai-agent-backend:prod
+    container_name: fga-backend
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      PORT: 8123
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:?请在 .env 中设置 DASHSCOPE_API_KEY}
+      DASHSCOPE_CHAT_MODEL: ${DASHSCOPE_CHAT_MODEL:-qwen-max}
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-hgx_ai_agent}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      SPRING_NEO4J_URI: bolt://neo4j:7687
+      SPRING_NEO4J_USERNAME: neo4j
+      SPRING_NEO4J_PASSWORD: ${NEO4J_PASSWORD}
+      SEARCH_API_KEY: ${SEARCH_API_KEY:-}
+      KNOWLEDGE_STORAGE_DIR: /data/knowledge-documents
+      JAVA_OPTS: ${JAVA_OPTS:--Xms256m -Xmx512m}
+    volumes:
+      - knowledge-docs:/data/knowledge-documents
+    depends_on:
+      db:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+    networks: [fga]
+
+  frontend:
+    build:
+      context: ./hgx-ai-agent-frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: /api
+    image: hgx-ai-agent-frontend:prod
+    container_name: fga-frontend
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    volumes:
+      # 使用 compose 专用 nginx 配置，将 /api 反代到 backend 容器
+      - ./deploy/nginx.compose.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - backend
+    networks: [fga]
+
+volumes:
+  db-data:
+  neo4j-data:
+  knowledge-docs:
+
+networks:
+  fga:
+    driver: bridge
