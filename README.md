@@ -4,6 +4,11 @@
 
 > 本项目仅用于学习、研究和辅助分析，不作为正式预警发布系统或防汛指挥系统。涉及人员转移、预警发布、应急响应等内容，应以属地防汛部门和正式预案为准。
 
+## 在线演示
+
+- 演示地址：https://floodguard.art
+- 部署方式：Docker Compose 一体化部署 + Caddy 自动 HTTPS，详见 [DEPLOYMENT_SERVER.md](DEPLOYMENT_SERVER.md)
+
 ## 登录界面（分为管理员和用户界面）
 > ![img.png](img.png)
 ## 智能体思考界面
@@ -113,6 +118,10 @@ hgx-ai-agent
 │   └── application-prod.yml
 ├── hgx-ai-agent-frontend  # Vue3 前端项目
 ├── Dockerfile             # 后端 Dockerfile
+├── docker-compose.yml     # 一体化部署编排（前端/后端/PostgreSQL/Neo4j）
+├── deploy                 # 部署辅助配置（nginx 反代、pgvector 初始化、Maven 镜像）
+├── .env.example           # 环境变量模板
+├── DEPLOYMENT_SERVER.md   # 通用服务器部署指南
 └── DEPLOYMENT_WECHAT_CLOUD.md
 ```
 
@@ -243,6 +252,20 @@ GET /knowledge/graph/visualize
 ```
 
 ## Docker 部署
+
+### Docker Compose 一体化部署（推荐）
+
+一条命令拉起前端、后端、PostgreSQL(pgvector)、Neo4j 全部服务：
+
+```bash
+cp .env.example .env   # 填写 DASHSCOPE_API_KEY 和数据库密码
+docker compose up -d --build
+```
+
+默认访问 `http://服务器IP:8088`（端口由 `.env` 中 `HTTP_PORT` 控制）。
+详细步骤、HTTPS/域名配置见 [DEPLOYMENT_SERVER.md](DEPLOYMENT_SERVER.md)。
+
+### 单独构建镜像
 
 后端构建：
 
