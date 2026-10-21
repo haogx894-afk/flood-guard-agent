@@ -2856,3 +2856,77 @@ h3 {
   color: #c0c6cf;
   cursor: not-allowed;
 }
+
+/* ===== 批量图层导入 ===== */
+.map-import-batch {
+  margin-top: 10px;
+}
+
+.map-import-list {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.map-import-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.map-import-name {
+  border: 1px solid #d5dce6;
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 13px;
+  min-width: 160px;
+}
+
+.map-import-item input[type='color'] {
+  width: 32px;
+  height: 28px;
+  border: 1px solid #d5dce6;
+  border-radius: 6px;
+  padding: 1px;
+  cursor: pointer;
+}
+
+.map-import-status {
+  font-size: 12px;
+  color: #5b6472;
+}
+
+.map-import-status.ready {
+  color: #389e0d;
+}
+
+.map-import-status.error {
+  color: #d4380d;
+}
+
+.map-import-status.uploading {
+  color: #2f80ed;
+}
+
+.map-import-status.done {
+  color: #389e0d;
+}
+
+.map-import-submit {
+  margin-top: 8px;
+  border: none;
+  background: #2f80ed;
+  color: #fff;
+  border-radius: 8px;
+  padding: 7px 18px;
+  font-size: 13px;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.map-import-submit:disabled {
+  background: #9db9e0;
+  cursor: not-allowed;
+}

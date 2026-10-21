@@ -18,6 +18,7 @@ import { nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { getMapQueryResult } from '../services/api';
+import { wgs84ToGcj02, geojsonToGcj02 } from '../services/coords';
 
 const props = defineProps({
   mapId: {
@@ -61,10 +62,11 @@ function renderMap() {
 
   const allBounds = [];
 
-  // 目标地点高亮
+  // 目标地点高亮（纠偏到 GCJ-02 与高德底图对齐）
   const { center, targetName } = bundle.value;
-  if (center) {
-    L.circleMarker([center.lat, center.lon], {
+  const gcjCenter = center ? wgs84ToGcj02(center.lon, center.lat) : null;
+  if (gcjCenter) {
+    L.circleMarker([gcjCenter[1], gcjCenter[0]], {
       radius: 10,
       color: '#d4380d',
       weight: 3,
@@ -74,12 +76,12 @@ function renderMap() {
       .addTo(map)
       .bindPopup(`<strong>${targetName || '目标地点'}</strong>`)
       .openPopup();
-    allBounds.push([center.lat, center.lon]);
+    allBounds.push([gcjCenter[1], gcjCenter[0]]);
   }
 
   // 周边圈层
-  if (center && bundle.value.radiusKm) {
-    L.circle([center.lat, center.lon], {
+  if (gcjCenter && bundle.value.radiusKm) {
+    L.circle([gcjCenter[1], gcjCenter[0]], {
       radius: bundle.value.radiusKm * 1000,
       color: '#2f80ed',
       weight: 1,
@@ -90,7 +92,7 @@ function renderMap() {
 
   // 各图层要素
   for (const layer of bundle.value.layers || []) {
-    L.geoJSON(layer.geojson, {
+    L.geoJSON(geojsonToGcj02(layer.geojson), {
       style: () => ({ color: layer.color, weight: 2, fillOpacity: 0.25 }),
       pointToLayer: (feature, latlng) =>
         L.circleMarker(latlng, {
@@ -111,7 +113,8 @@ function renderMap() {
         );
       },
     }).addTo(map);
-    for (const f of layer.geojson?.features || []) {
+    const transformed = geojsonToGcj02(layer.geojson);
+    for (const f of transformed?.features || []) {
       const coords = centroidOf(f.geometry);
       if (coords) {
         allBounds.push(coords);
@@ -121,8 +124,8 @@ function renderMap() {
 
   if (allBounds.length > 1) {
     map.fitBounds(allBounds, { padding: [24, 24] });
-  } else if (center) {
-    map.setView([center.lat, center.lon], 13);
+  } else if (gcjCenter) {
+    map.setView([gcjCenter[1], gcjCenter[0]], 13);
   }
 }
 

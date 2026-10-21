@@ -765,24 +765,39 @@
             </div>
           </div>
 
-          <!-- 管理员图层导入（只增删、不修改） -->
+          <!-- 管理员图层导入（只增删、不修改），支持 GeoJSON / Shapefile 批量上传 -->
           <div v-if="canManageUsers" class="map-admin-panel">
             <button type="button" class="map-admin-toggle" @click="showLayerImport = !showLayerImport">
               {{ showLayerImport ? '收起导入' : '导入新图层' }}
             </button>
-            <form v-if="showLayerImport" class="map-import-form" @submit.prevent="submitLayerImport">
-              <input v-model.trim="layerImportForm.layerId" placeholder="图层ID，如 villages" required />
-              <input v-model.trim="layerImportForm.layerName" placeholder="图层名称，如 险村" required />
-              <input v-model="layerImportForm.color" type="color" title="图层颜色" />
-              <input type="file" accept=".geojson,.json" @change="onLayerFileChange" required />
-              <button type="submit" :disabled="isMapBusy">
-                {{ isMapBusy ? '导入中...' : '导入' }}
-              </button>
-            </form>
-            <p v-if="showLayerImport" class="map-import-hint">
-              支持 GeoJSON 文件（.geojson/.json，坐标系 WGS84/CGCS2000）。Shapefile 可先用
-              mapshaper.org 或 QGIS 转为 GeoJSON。同名图层不允许覆盖，请先删除再导入。
-            </p>
+            <div v-if="showLayerImport" class="map-import-batch">
+              <input
+                type="file"
+                multiple
+                accept=".geojson,.json,.zip,.shp,.dbf,.shx,.prj,.cpg"
+                @change="onLayerFilesChange"
+              />
+              <p class="map-import-hint">
+                支持 GeoJSON（.geojson/.json）和 Shapefile（整套选中 .shp/.dbf/.shx/.prj/.cpg，或打包成 .zip），
+                可多选批量导入。Shapefile 在浏览器端自动转 GeoJSON，坐标系建议 CGCS2000/WGS84。
+                同名图层不允许覆盖，请先删除再导入。
+              </p>
+              <div v-if="layerImportList.length > 0" class="map-import-list">
+                <div v-for="item in layerImportList" :key="item.key" class="map-import-item">
+                  <input v-model.trim="item.name" class="map-import-name" placeholder="图层名称" />
+                  <input v-model="item.color" type="color" title="图层颜色" />
+                  <span class="map-import-status" :class="item.status">{{ item.statusText }}</span>
+                </div>
+                <button
+                  type="button"
+                  class="map-import-submit"
+                  :disabled="isMapBusy || !layerImportList.some((i) => i.status === 'ready')"
+                  @click="submitBatchImport"
+                >
+                  {{ isMapBusy ? '导入中...' : `导入全部（${layerImportList.filter((i) => i.status === 'ready').length} 个图层）` }}
+                </button>
+              </div>
+            </div>
           </div>
 
           <div v-if="mapError" class="message-banner error">{{ mapError }}</div>
@@ -925,6 +940,8 @@ import {
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { getMapMeta, getMapLayerFeatures, importMapLayer, deleteMapLayer } from './services/api';
+import shp, { parseShp, parseDbf, combine as shpCombine } from 'shpjs';
+import { geojsonToGcj02, wgs84ToGcj02 } from './services/coords';
 
 // crypto.randomUUID 仅在 HTTPS/localhost 等安全上下文可用，
 // 纯 HTTP（如 http://IP:端口）环境下需要回退实现，否则页面白屏。
@@ -1586,8 +1603,10 @@ const mapNotice = ref('');
 const isMapLoading = ref(false);
 const isMapBusy = ref(false);
 const showLayerImport = ref(false);
-const layerImportForm = ref({ layerId: '', layerName: '', color: '#2f80ed', file: null });
+const layerImportList = ref([]);
 const enabledMapLayers = ref(new Set());
+
+const LAYER_COLOR_PALETTE = ['#2f80ed', '#d4380d', '#389e0d', '#722ed1', '#c41d7f', '#08979c', '#d4b106', '#531dab'];
 
 let leafletMap = null;
 const leafletLayerGroups = new Map(); // layerId -> L.LayerGroup
@@ -1645,7 +1664,9 @@ async function loadMapData(forceRefresh = false) {
     if (data?.bounds && leafletMap) {
       const { minLon, minLat, maxLon, maxLat } = data.bounds;
       if (maxLon > minLon && maxLat > minLat) {
-        leafletMap.fitBounds([[minLat, minLon], [maxLat, maxLon]], { padding: [30, 30] });
+        const sw = wgs84ToGcj02(minLon, minLat);
+        const ne = wgs84ToGcj02(maxLon, maxLat);
+        leafletMap.fitBounds([[sw[1], sw[0]], [ne[1], ne[0]]], { padding: [30, 30] });
       }
     }
   } catch (error) {
@@ -1655,31 +1676,140 @@ async function loadMapData(forceRefresh = false) {
   }
 }
 
-function onLayerFileChange(event) {
-  layerImportForm.value.file = event.target.files?.[0] || null;
+function onLayerFilesChange(event) {
+  const files = [...(event.target.files || [])];
+  event.target.value = '';
+  buildImportList(files);
 }
 
-async function submitLayerImport() {
-  const { layerId, layerName, color, file } = layerImportForm.value;
-  if (!layerId || !layerName || !file) {
-    mapError.value = '请填写图层ID、名称并选择 GeoJSON 文件';
-    return;
+async function buildImportList(files) {
+  mapError.value = '';
+  const items = [];
+  const shpGroups = new Map(); // basename -> {ext: File}
+
+  for (const file of files) {
+    const dot = file.name.lastIndexOf('.');
+    const base = file.name.slice(0, dot);
+    const ext = file.name.slice(dot + 1).toLowerCase();
+    if (ext === 'geojson' || ext === 'json' || ext === 'zip') {
+      items.push({ key: file.name, name: base, file, kind: ext });
+    } else if (['shp', 'dbf', 'shx', 'prj', 'cpg'].includes(ext)) {
+      if (!shpGroups.has(base)) {
+        shpGroups.set(base, {});
+      }
+      shpGroups.get(base)[ext] = file;
+    }
   }
-  if (!/^[a-zA-Z0-9_-]+$/.test(layerId)) {
-    mapError.value = '图层ID 只能包含字母、数字、下划线和短横线';
-    return;
+
+  let idx = 0;
+  for (const item of items) {
+    layerImportList.value.push({
+      key: item.key,
+      name: item.name,
+      color: LAYER_COLOR_PALETTE[(layerImportList.value.length + idx) % LAYER_COLOR_PALETTE.length],
+      status: 'converting',
+      statusText: '解析中...',
+      geojson: null,
+    });
+    const ref = layerImportList.value[layerImportList.value.length - 1];
+    try {
+      ref.geojson = item.kind === 'zip' ? await readZipShapefile(item.file) : await readGeoJsonFile(item.file);
+      ref.status = 'ready';
+      ref.statusText = `就绪（${ref.geojson.features?.length ?? 0} 个要素）`;
+    } catch (e) {
+      ref.status = 'error';
+      ref.statusText = `解析失败：${e.message || e}`;
+    }
+    idx++;
   }
+
+  for (const [base, group] of shpGroups) {
+    layerImportList.value.push({
+      key: base,
+      name: base,
+      color: LAYER_COLOR_PALETTE[(layerImportList.value.length + idx) % LAYER_COLOR_PALETTE.length],
+      status: 'converting',
+      statusText: '解析中...',
+      geojson: null,
+    });
+    const ref = layerImportList.value[layerImportList.value.length - 1];
+    try {
+      ref.geojson = await readShapefileGroup(group);
+      ref.status = 'ready';
+      ref.statusText = `就绪（${ref.geojson.features?.length ?? 0} 个要素）`;
+    } catch (e) {
+      ref.status = 'error';
+      ref.statusText = `解析失败：${e.message || e}`;
+    }
+    idx++;
+  }
+}
+
+async function readGeoJsonFile(file) {
+  const text = await file.text();
+  const json = JSON.parse(text);
+  if (json.type !== 'FeatureCollection' || !Array.isArray(json.features)) {
+    throw new Error('不是 GeoJSON FeatureCollection');
+  }
+  return json;
+}
+
+async function readZipShapefile(file) {
+  const buffer = await file.arrayBuffer();
+  const result = await shp(buffer); // shpjs 直接解析 zip
+  const fc = Array.isArray(result) ? result[0] : result;
+  if (!fc || fc.type !== 'FeatureCollection') {
+    throw new Error('zip 内未找到有效的 Shapefile');
+  }
+  return fc;
+}
+
+async function readShapefileGroup(group) {
+  if (!group.shp || !group.dbf) {
+    throw new Error('Shapefile 至少需要同时选择 .shp 和 .dbf 文件');
+  }
+  const shpBuf = await group.shp.arrayBuffer();
+  const dbfBuf = await group.dbf.arrayBuffer();
+  const prjText = group.prj ? await group.prj.text() : undefined;
+  // .cpg 声明属性表编码（国内常见 GBK）
+  const cpgText = group.cpg ? (await group.cpg.text()).trim() : 'GBK';
+  const geoms = parseShp(shpBuf, prjText);
+  const props = parseDbf(dbfBuf, cpgText);
+  const fc = shpCombine([geoms, props]);
+  if (!fc || fc.type !== 'FeatureCollection' || !fc.features?.length) {
+    throw new Error('Shapefile 内容为空或无法解析');
+  }
+  return fc;
+}
+
+async function submitBatchImport() {
   mapError.value = '';
   mapNotice.value = '';
   isMapBusy.value = true;
+  let successCount = 0;
   try {
-    const { data } = await importMapLayer(layerId, layerName, color, file);
-    mapNotice.value = `图层「${layerName}」导入成功，共 ${data.featureCount} 个要素`;
-    layerImportForm.value = { layerId: '', layerName: '', color: '#2f80ed', file: null };
-    showLayerImport.value = false;
+    for (const item of layerImportList.value) {
+      if (item.status !== 'ready') {
+        continue;
+      }
+      item.status = 'uploading';
+      item.statusText = '上传中...';
+      const layerId = `layer_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+      const blob = new Blob([JSON.stringify(item.geojson)], { type: 'application/geo+json' });
+      const file = new File([blob], `${item.name}.geojson`);
+      try {
+        const { data } = await importMapLayer(layerId, item.name, item.color, file);
+        item.status = 'done';
+        item.statusText = `已导入 ${data.featureCount} 个要素`;
+        successCount++;
+      } catch (e) {
+        item.status = 'error';
+        item.statusText = getErrorMessage(e, '导入失败');
+      }
+    }
+    mapNotice.value = `成功导入 ${successCount} 个图层`;
+    layerImportList.value = layerImportList.value.filter((i) => i.status === 'error');
     await loadMapData(true);
-  } catch (error) {
-    mapError.value = getErrorMessage(error, '图层导入失败');
   } finally {
     isMapBusy.value = false;
   }
@@ -1711,7 +1841,8 @@ async function renderMapLayer(layer) {
     return;
   }
   const { data: geojson } = await getMapLayerFeatures(layer.id);
-  const group = L.geoJSON(geojson, {
+  // CGCS2000/WGS84 数据纠偏到 GCJ-02，与高德底图对齐
+  const group = L.geoJSON(geojsonToGcj02(geojson), {
     style: () => ({ color: layer.color, weight: 2, fillOpacity: 0.25 }),
     pointToLayer: (feature, latlng) =>
       L.circleMarker(latlng, {
