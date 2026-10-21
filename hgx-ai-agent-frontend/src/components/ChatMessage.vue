@@ -10,8 +10,7 @@
       </div>
       <div class="bubble-content" :class="{ rich: shouldRenderRichText }">
         <template v-if="shouldRenderRichText">
-          <template v-for="block in richBlocks" :key="block.id">
-            <h4 v-if="block.type === 'heading'" class="rich-heading">
+          <template v-for="block in richBlocks" :key="block.id">            <h4 v-if="block.type === 'heading'" class="rich-heading">
               <template v-for="segment in block.segments" :key="segment.id">
                 <span :class="{ 'rich-strong': segment.strong }">{{ segment.text }}</span>
               </template>
@@ -41,6 +40,9 @@
         <template v-else>
           {{ normalizedContent }}<span v-if="message.isTyping" class="typing-caret" aria-hidden="true"></span>
         </template>
+
+        <!-- 对话内地图卡片：AI 回答中的 [MAP:xxx] 标记渲染为可收放的地图 -->
+        <ChatMapCard v-for="id in mapIds" :key="id" :map-id="id" />
       </div>
     </article>
   </div>
@@ -48,6 +50,7 @@
 
 <script setup>
 import { computed } from 'vue';
+import ChatMapCard from './ChatMapCard.vue';
 
 const props = defineProps({
   message: {
@@ -56,8 +59,17 @@ const props = defineProps({
   },
 });
 
+const MAP_MARKER_PATTERN = /\[MAP:([A-Za-z0-9-]+)\]/g;
+
 const isStepMessage = computed(() => props.message.content?.startsWith('Step '));
-const normalizedContent = computed(() => String(props.message.content || '').replace(/\\n/g, '\n'));
+const mapIds = computed(() => {
+  const raw = String(props.message.content || '');
+  return [...raw.matchAll(MAP_MARKER_PATTERN)].map((m) => m[1]);
+});
+// 展示文本中剥离地图标记
+const normalizedContent = computed(() =>
+  String(props.message.content || '').replace(/\\n/g, '\n').replace(MAP_MARKER_PATTERN, '').trim()
+);
 const shouldRenderRichText = computed(() => props.message.role === 'assistant' && normalizedContent.value.length > 0);
 const richBlocks = computed(() => parseAssistantContent(normalizedContent.value));
 const title = computed(() => {

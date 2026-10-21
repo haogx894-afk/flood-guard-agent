@@ -130,3 +130,33 @@ export function getChatMessages(conversationId) {
 export function deleteChatConversation(conversationId) {
   return apiClient.delete(`/chat/conversations/${encodeURIComponent(conversationId)}`);
 }
+
+export function getMapMeta() {
+  return apiClient.get('/map/meta');
+}
+
+export function getMapLayerFeatures(layerId) {
+  return apiClient.get(`/map/layers/${encodeURIComponent(layerId)}/features`);
+}
+
+export function importMapLayer(layerId, layerName, color, file) {
+  const formData = new FormData();
+  formData.append('layerId', layerId);
+  formData.append('layerName', layerName);
+  if (color) {
+    formData.append('color', color);
+  }
+  formData.append('file', file);
+  return apiClient.post('/map/layers/import', formData, {
+    timeout: 120000,
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+}
+
+export function deleteMapLayer(layerId) {
+  return apiClient.delete(`/map/layers/${encodeURIComponent(layerId)}`);
+}
+
+export function getMapQueryResult(resultId) {
+  return apiClient.get(`/map/query/${encodeURIComponent(resultId)}`);
+}

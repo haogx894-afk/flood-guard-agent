@@ -6,7 +6,10 @@
 
 services:
   db:
-    image: pgvector/pgvector:pg16
+    build:
+      context: ./deploy/db
+      dockerfile: Dockerfile
+    image: fga-postgres:16-postgis-pgvector
     container_name: fga-db
     restart: unless-stopped
     environment:

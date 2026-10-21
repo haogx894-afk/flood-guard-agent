@@ -120,6 +120,13 @@
               知识库管理
             </button>
             <button
+              type="button"
+              :class="{ active: activeView === 'map' }"
+              @click="switchView('map')"
+            >
+              空间地图
+            </button>
+            <button
               v-if="canManageUsers"
               type="button"
               :class="{ active: activeView === 'users' }"
@@ -726,6 +733,72 @@
           </section>
         </section>
 
+        <section v-else-if="activeView === 'map'" class="map-card fluent-card">
+          <div class="map-header">
+            <div>
+              <p class="section-kicker">Spatial Decision Map</p>
+              <h2>山洪防御空间地图</h2>
+            </div>
+            <div class="map-layer-toggles">
+              <label
+                v-for="layer in mapMeta?.layers || []"
+                :key="layer.id"
+                class="map-layer-toggle"
+              >
+                <input
+                  type="checkbox"
+                  :checked="enabledMapLayers.has(layer.id)"
+                  @change="toggleMapLayer(layer.id)"
+                />
+                <span class="map-layer-swatch" :style="{ background: layer.color }"></span>
+                {{ layer.name }}（{{ layer.featureCount }}）
+                <button
+                  v-if="canManageUsers"
+                  type="button"
+                  class="map-layer-delete"
+                  :disabled="isMapBusy"
+                  @click.prevent="removeMapLayer(layer)"
+                >
+                  删除
+                </button>
+              </label>
+            </div>
+          </div>
+
+          <!-- 管理员图层导入（只增删、不修改） -->
+          <div v-if="canManageUsers" class="map-admin-panel">
+            <button type="button" class="map-admin-toggle" @click="showLayerImport = !showLayerImport">
+              {{ showLayerImport ? '收起导入' : '导入新图层' }}
+            </button>
+            <form v-if="showLayerImport" class="map-import-form" @submit.prevent="submitLayerImport">
+              <input v-model.trim="layerImportForm.layerId" placeholder="图层ID，如 villages" required />
+              <input v-model.trim="layerImportForm.layerName" placeholder="图层名称，如 险村" required />
+              <input v-model="layerImportForm.color" type="color" title="图层颜色" />
+              <input type="file" accept=".geojson,.json" @change="onLayerFileChange" required />
+              <button type="submit" :disabled="isMapBusy">
+                {{ isMapBusy ? '导入中...' : '导入' }}
+              </button>
+            </form>
+            <p v-if="showLayerImport" class="map-import-hint">
+              支持 GeoJSON 文件（.geojson/.json，坐标系 WGS84/CGCS2000）。Shapefile 可先用
+              mapshaper.org 或 QGIS 转为 GeoJSON。同名图层不允许覆盖，请先删除再导入。
+            </p>
+          </div>
+
+          <div v-if="mapError" class="message-banner error">{{ mapError }}</div>
+          <div v-if="mapNotice" class="message-banner">{{ mapNotice }}</div>
+          <div class="map-body">
+            <div ref="mapContainerRef" class="map-container"></div>
+            <div v-if="isMapLoading" class="map-loading">正在加载空间数据...</div>
+            <div
+              v-else-if="!mapMeta || (mapMeta.layers || []).length === 0"
+              class="map-empty"
+            >
+              暂无空间数据图层。<span v-if="canManageUsers">点击上方「导入新图层」上传 GeoJSON 数据。</span>
+            </div>
+          </div>
+        </section>
+
         <section v-else class="user-admin-card fluent-card">
           <div class="user-admin-header">
             <div>
@@ -849,6 +922,9 @@ import {
   uploadKnowledgeDocument,
   visualizeKnowledgeGraph,
 } from './services/api';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+import { getMapMeta, getMapLayerFeatures, importMapLayer, deleteMapLayer } from './services/api';
 
 // crypto.randomUUID 仅在 HTTPS/localhost 等安全上下文可用，
 // 纯 HTTP（如 http://IP:端口）环境下需要回退实现，否则页面白屏。
@@ -1494,8 +1570,207 @@ async function switchView(view) {
     if (knowledgeTab.value === 'graph') {
       await loadGraphInitialData();
     }
+    return;
+  }
+  if (view === 'map') {
+    await nextTick();
+    await initAndLoadMap();
   }
 }
+
+// ===== 空间地图（Leaflet + PostGIS GeoJSON） =====
+const mapContainerRef = ref(null);
+const mapMeta = ref(null);
+const mapError = ref('');
+const mapNotice = ref('');
+const isMapLoading = ref(false);
+const isMapBusy = ref(false);
+const showLayerImport = ref(false);
+const layerImportForm = ref({ layerId: '', layerName: '', color: '#2f80ed', file: null });
+const enabledMapLayers = ref(new Set());
+
+let leafletMap = null;
+const leafletLayerGroups = new Map(); // layerId -> L.LayerGroup
+
+async function initAndLoadMap() {
+  if (!mapContainerRef.value) {
+    return;
+  }
+  if (!leafletMap) {
+    // 高德栅格瓦片（GCJ-02 坐标系），与国内常用空间数据对齐
+    leafletMap = L.map(mapContainerRef.value, {
+      center: [40.4, 116.3],
+      zoom: 9,
+      zoomControl: true,
+    });
+    L.tileLayer(
+      'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+      { subdomains: ['1', '2', '3', '4'], maxZoom: 18, attribution: '© 高德地图' }
+    ).addTo(leafletMap);
+  }
+  // 从其他视图切回时容器尺寸可能变化，需要重新计算
+  leafletMap.invalidateSize();
+  await loadMapData();
+}
+
+async function loadMapData(forceRefresh = false) {
+  mapError.value = '';
+  mapNotice.value = '';
+  isMapLoading.value = true;
+  try {
+    const { data } = await getMapMeta();
+    mapMeta.value = data;
+    const layers = data?.layers || [];
+    if (forceRefresh) {
+      // 清空已渲染图层，按最新元数据重建
+      for (const group of leafletLayerGroups.values()) {
+        if (leafletMap) {
+          leafletMap.removeLayer(group);
+        }
+      }
+      leafletLayerGroups.clear();
+    }
+    // 刷新或首次加载时默认启用所有图层；否则保留用户已有的开关状态
+    if (forceRefresh || enabledMapLayers.value.size === 0) {
+      enabledMapLayers.value = new Set(layers.map((l) => l.id));
+    } else {
+      const stillExists = new Set(layers.map((l) => l.id));
+      enabledMapLayers.value = new Set(
+        [...enabledMapLayers.value].filter((id) => stillExists.has(id))
+      );
+    }
+    for (const layer of layers) {
+      await renderMapLayer(layer);
+    }
+    if (data?.bounds && leafletMap) {
+      const { minLon, minLat, maxLon, maxLat } = data.bounds;
+      if (maxLon > minLon && maxLat > minLat) {
+        leafletMap.fitBounds([[minLat, minLon], [maxLat, maxLon]], { padding: [30, 30] });
+      }
+    }
+  } catch (error) {
+    mapError.value = getErrorMessage(error, '地图数据加载失败');
+  } finally {
+    isMapLoading.value = false;
+  }
+}
+
+function onLayerFileChange(event) {
+  layerImportForm.value.file = event.target.files?.[0] || null;
+}
+
+async function submitLayerImport() {
+  const { layerId, layerName, color, file } = layerImportForm.value;
+  if (!layerId || !layerName || !file) {
+    mapError.value = '请填写图层ID、名称并选择 GeoJSON 文件';
+    return;
+  }
+  if (!/^[a-zA-Z0-9_-]+$/.test(layerId)) {
+    mapError.value = '图层ID 只能包含字母、数字、下划线和短横线';
+    return;
+  }
+  mapError.value = '';
+  mapNotice.value = '';
+  isMapBusy.value = true;
+  try {
+    const { data } = await importMapLayer(layerId, layerName, color, file);
+    mapNotice.value = `图层「${layerName}」导入成功，共 ${data.featureCount} 个要素`;
+    layerImportForm.value = { layerId: '', layerName: '', color: '#2f80ed', file: null };
+    showLayerImport.value = false;
+    await loadMapData(true);
+  } catch (error) {
+    mapError.value = getErrorMessage(error, '图层导入失败');
+  } finally {
+    isMapBusy.value = false;
+  }
+}
+
+async function removeMapLayer(layer) {
+  if (!window.confirm(`确定删除图层「${layer.name}」吗？该图层下 ${layer.featureCount} 个要素将一并删除，不可恢复。`)) {
+    return;
+  }
+  mapError.value = '';
+  mapNotice.value = '';
+  isMapBusy.value = true;
+  try {
+    await deleteMapLayer(layer.id);
+    mapNotice.value = `图层「${layer.name}」已删除`;
+    await loadMapData(true);
+  } catch (error) {
+    mapError.value = getErrorMessage(error, '图层删除失败');
+  } finally {
+    isMapBusy.value = false;
+  }
+}
+
+async function renderMapLayer(layer) {
+  if (!leafletMap) {
+    return;
+  }
+  if (leafletLayerGroups.has(layer.id)) {
+    return;
+  }
+  const { data: geojson } = await getMapLayerFeatures(layer.id);
+  const group = L.geoJSON(geojson, {
+    style: () => ({ color: layer.color, weight: 2, fillOpacity: 0.25 }),
+    pointToLayer: (feature, latlng) =>
+      L.circleMarker(latlng, {
+        radius: 7,
+        color: layer.color,
+        weight: 2,
+        fillColor: layer.color,
+        fillOpacity: 0.7,
+      }),
+    onEachFeature: (feature, leafletLayer) => {
+      const props = feature.properties || {};
+      const rows = Object.entries(props)
+        .map(([k, v]) => `<tr><th>${escapeHtml(k)}</th><td>${escapeHtml(String(v))}</td></tr>`)
+        .join('');
+      leafletLayer.bindPopup(
+        `<div class="map-popup"><strong>${escapeHtml(props.name || layer.name)}</strong>` +
+          `<table>${rows}</table></div>`,
+        { maxWidth: 320 }
+      );
+    },
+  });
+  leafletLayerGroups.set(layer.id, group);
+  if (enabledMapLayers.value.has(layer.id)) {
+    group.addTo(leafletMap);
+  }
+}
+
+function toggleMapLayer(layerId) {
+  const next = new Set(enabledMapLayers.value);
+  if (next.has(layerId)) {
+    next.delete(layerId);
+  } else {
+    next.add(layerId);
+  }
+  enabledMapLayers.value = next;
+  const group = leafletLayerGroups.get(layerId);
+  if (!group || !leafletMap) {
+    return;
+  }
+  if (next.has(layerId)) {
+    group.addTo(leafletMap);
+  } else {
+    leafletMap.removeLayer(group);
+  }
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+onBeforeUnmount(() => {
+  if (leafletMap) {
+    leafletMap.remove();
+    leafletMap = null;
+    leafletLayerGroups.clear();
+  }
+});
 
 async function fetchUsers() {
   if (!canManageUsers.value) {

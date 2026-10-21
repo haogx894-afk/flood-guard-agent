@@ -2,6 +2,7 @@ package com.hgx.hgxaiagent.tools;
 
 import com.hgx.hgxaiagent.knowledgegraph.service.GraphReasoningService;
 import com.hgx.hgxaiagent.knowledgegraph.service.KnowledgeGraphService;
+import com.hgx.hgxaiagent.map.service.MapSpatialQueryService;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.ToolCallbacks;
 import org.springframework.beans.factory.annotation.Value;
@@ -24,7 +25,8 @@ public class ToolRegistration {
     public ToolCallback[] allTools(
             @Qualifier("pgVectorVectorStore") VectorStore pgVectorVectorStore,
             KnowledgeGraphService knowledgeGraphService,
-            GraphReasoningService graphReasoningService) {
+            GraphReasoningService graphReasoningService,
+            MapSpatialQueryService mapSpatialQueryService) {
         FileOperationTool fileOperationTool = new FileOperationTool();
         WebSearchTool webSearchTool = new WebSearchTool(searchApiKey);
         WebScrapingTool webScrapingTool = new WebScrapingTool();
@@ -36,6 +38,8 @@ public class ToolRegistration {
         LocalRagTool localRagTool = new LocalRagTool(pgVectorVectorStore);
         //使用neo4j知识图谱
         KnowledgeGraphTool knowledgeGraphTool = new KnowledgeGraphTool(knowledgeGraphService, graphReasoningService);
+        //空间地图查询（PostGIS 邻域分析）
+        MapSpatialTool mapSpatialTool = new MapSpatialTool(mapSpatialQueryService);
 
         return ToolCallbacks.from(
                 fileOperationTool,
@@ -46,7 +50,8 @@ public class ToolRegistration {
                 pdfGenerationTool,
                 terminateTool,
                 localRagTool,
-                knowledgeGraphTool
+                knowledgeGraphTool,
+                mapSpatialTool
         );
     }
 }

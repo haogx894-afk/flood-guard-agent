@@ -2610,3 +2610,249 @@ h3 {
     border-radius: 0;
   }
 }
+
+/* ===== 空间地图视图 ===== */
+.map-card {
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  gap: 12px;
+  min-height: 0;
+}
+
+.map-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.map-header h2 {
+  margin: 4px 0 0;
+}
+
+.map-layer-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: center;
+}
+
+.map-layer-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.map-layer-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+.map-body {
+  position: relative;
+  flex: 1;
+  min-height: 480px;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.map-container {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.map-loading,
+.map-empty {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.82);
+  color: #5b6472;
+  font-size: 14px;
+  pointer-events: none;
+}
+
+.map-popup table {
+  border-collapse: collapse;
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.map-popup th,
+.map-popup td {
+  border: 1px solid #e3e8ef;
+  padding: 3px 8px;
+  text-align: left;
+}
+
+.map-popup th {
+  background: #f5f7fa;
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .map-body {
+    min-height: 360px;
+  }
+}
+
+/* ===== 对话内地图卡片 ===== */
+.chat-map-card {
+  margin-top: 10px;
+  border: 1px solid #e3e8ef;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.chat-map-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: #f5f7fa;
+  font-size: 13px;
+}
+
+.chat-map-title {
+  font-weight: 600;
+  color: #1f2733;
+}
+
+.chat-map-toggle {
+  border: none;
+  background: none;
+  color: #2f80ed;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+
+.chat-map-toggle:hover {
+  text-decoration: underline;
+}
+
+.chat-map-body {
+  position: relative;
+  height: 320px;
+}
+
+.chat-map-container {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.chat-map-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.85);
+  color: #5b6472;
+  font-size: 13px;
+}
+
+/* ===== 地图管理员面板 ===== */
+.map-admin-panel {
+  border-top: 1px dashed #e3e8ef;
+  padding-top: 10px;
+}
+
+.map-admin-toggle {
+  border: 1px solid #2f80ed;
+  background: #fff;
+  color: #2f80ed;
+  border-radius: 8px;
+  padding: 5px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.map-admin-toggle:hover {
+  background: #2f80ed;
+  color: #fff;
+}
+
+.map-import-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.map-import-form input[type='text'],
+.map-import-form input:not([type]) {
+  border: 1px solid #d5dce6;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  min-width: 140px;
+}
+
+.map-import-form input[type='color'] {
+  width: 36px;
+  height: 32px;
+  border: 1px solid #d5dce6;
+  border-radius: 8px;
+  padding: 2px;
+  cursor: pointer;
+}
+
+.map-import-form input[type='file'] {
+  font-size: 12px;
+  max-width: 220px;
+}
+
+.map-import-form button[type='submit'] {
+  border: none;
+  background: #2f80ed;
+  color: #fff;
+  border-radius: 8px;
+  padding: 7px 18px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.map-import-form button[type='submit']:disabled {
+  background: #9db9e0;
+  cursor: not-allowed;
+}
+
+.map-import-hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #8a93a3;
+}
+
+.map-layer-delete {
+  border: none;
+  background: none;
+  color: #d4380d;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.map-layer-delete:hover {
+  text-decoration: underline;
+}
+
+.map-layer-delete:disabled {
+  color: #c0c6cf;
+  cursor: not-allowed;
+}

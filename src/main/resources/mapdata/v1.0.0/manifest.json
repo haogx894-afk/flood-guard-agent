@@ -1,0 +1,71 @@
+{
+  "version": "1.0.0",
+  "name": "山洪防御空间数据（演示）",
+  "crs": "GCJ-02",
+  "note": "示意数据，不对应真实地理实体；由 scripts/generate_map_data.py 生成，原始坐标 WGS84，输出前已做 GCJ-02 纠偏",
+  "generatedAt": "2026-10-21T11:34:56+08:00",
+  "bounds": {
+    "minLon": 115.556094,
+    "minLat": 39.60103,
+    "maxLon": 115.955972,
+    "maxLat": 39.851072
+  },
+  "layers": [
+    {
+      "name": "流域",
+      "geometry": "Polygon",
+      "color": "#3b82f6",
+      "order": 1,
+      "id": "basin",
+      "featureCount": 1
+    },
+    {
+      "name": "山洪沟道",
+      "geometry": "LineString",
+      "color": "#f97316",
+      "order": 2,
+      "id": "gully",
+      "featureCount": 7
+    },
+    {
+      "name": "河段",
+      "geometry": "LineString",
+      "color": "#eab308",
+      "order": 3,
+      "id": "reach",
+      "featureCount": 18
+    },
+    {
+      "name": "危险区",
+      "geometry": "Polygon",
+      "color": "#ef4444",
+      "order": 4,
+      "id": "danger_zone",
+      "featureCount": 7
+    },
+    {
+      "name": "断面",
+      "geometry": "Point",
+      "color": "#8b5cf6",
+      "order": 5,
+      "id": "section",
+      "featureCount": 18
+    },
+    {
+      "name": "村庄",
+      "geometry": "Point",
+      "color": "#22c55e",
+      "order": 6,
+      "id": "village",
+      "featureCount": 12
+    },
+    {
+      "name": "监测站",
+      "geometry": "Point",
+      "color": "#06b6d4",
+      "order": 7,
+      "id": "station",
+      "featureCount": 5
+    }
+  ]
+}
